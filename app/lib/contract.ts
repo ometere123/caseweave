@@ -1,5 +1,6 @@
 export const CASEWEAVE_CONTRACT_ADDRESS =
-  "0x322b999682CdDecE9b7e704541F86dC86D18D35a" as const;
+  (process.env.NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS ??
+    "0x322b999682CdDecE9b7e704541F86dC86D18D35a") as `0x${string}`;
 
 export const EVIDENCE_STATUSES = [
   "unverified",
@@ -10,7 +11,9 @@ export const EVIDENCE_STATUSES = [
   "not_relevant",
 ] as const;
 
-export const STUDIONET_CHAIN_ID = 61999;
+export const STUDIONET_CHAIN_ID = Number(
+  process.env.NEXT_PUBLIC_STUDIONET_CHAIN_ID ?? 61999,
+);
 
 export const ALLOWED_AGREEMENT_TYPES = [
   "freelance",
