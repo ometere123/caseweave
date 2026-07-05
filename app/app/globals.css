@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+:root {
+  --ink-black: #0b0d0f;
+  --archive-charcoal: #15171a;
+  --legal-paper: #e8ddc7;
+  --faded-parchment: #cbbf9f;
+  --case-gold: #b9944d;
+  --citation-blue: #4c7d96;
+  --dispute-red: #a3473f;
+  --verdict-green: #4e7c59;
+  --muted-grey: #7b7f86;
+  --line-brown: #5a4735;
+
+  --background: var(--ink-black);
+  --foreground: var(--legal-paper);
+}
+
+@theme inline {
+  --color-ink: var(--ink-black);
+  --color-charcoal: var(--archive-charcoal);
+  --color-paper: var(--legal-paper);
+  --color-parchment: var(--faded-parchment);
+  --color-gold: var(--case-gold);
+  --color-citation: var(--citation-blue);
+  --color-dispute: var(--dispute-red);
+  --color-verdict: var(--verdict-green);
+  --color-muted: var(--muted-grey);
+  --color-line: var(--line-brown);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  background:
+    radial-gradient(ellipse at top, rgba(185, 148, 77, 0.06), transparent 60%),
+    var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-display), serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), monospace;
+}
+
+.paper-texture {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(232, 221, 199, 0.015) 0px,
+    rgba(232, 221, 199, 0.015) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+.citation-line {
+  border-top: 1px solid rgba(90, 71, 53, 0.5);
+}
+
+.folder-spine {
+  border-left: 3px solid var(--muted-grey);
+}
+
+.folder-spine[data-status="active"] {
+  border-left-color: var(--verdict-green);
+}
+.folder-spine[data-status="disputed"] {
+  border-left-color: var(--dispute-red);
+}
+.folder-spine[data-status="resolved"] {
+  border-left-color: var(--citation-blue);
+}
+.folder-spine[data-status="archived"] {
+  border-left-color: var(--muted-grey);
+}
+.folder-spine[data-status="pending_acceptance"] {
+  border-left-color: var(--case-gold);
+}
+
+::selection {
+  background: rgba(185, 148, 77, 0.35);
+}
+
+* {
+  scrollbar-color: var(--line-brown) var(--archive-charcoal);
+}
