@@ -3,21 +3,28 @@
 import { useEffect, useState, useCallback } from "react";
 import { readContract, writeContract } from "../../../lib/genlayer";
 import { useWallet } from "../../../store/useWallet";
-import type { Dispute } from "../../../lib/contract";
+import type { Dispute, EvidenceItem } from "../../../lib/contract";
 import { EvidenceRail } from "../../../components/EvidenceRail";
 import { PrecedentBench } from "../../../components/PrecedentBench";
 import { VerdictPanel } from "../../../components/VerdictPanel";
 
+type EvidenceState = { claimant: EvidenceItem[]; respondent: EvidenceItem[] };
+
 export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
   const { address, connect } = useWallet();
   const [dispute, setDispute] = useState<Dispute | null>(null);
+  const [evidence, setEvidence] = useState<EvidenceState>({ claimant: [], respondent: [] });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const d = await readContract("get_dispute", [disputeId]);
+      const [d, ev] = await Promise.all([
+        readContract("get_dispute", [disputeId]),
+        readContract("list_evidence_for_dispute", [disputeId]),
+      ]);
       setDispute(d as Dispute);
+      setEvidence(ev as EvidenceState);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dispute");
     }
@@ -44,11 +51,13 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
   if (error && !dispute) return <div className="max-w-6xl mx-auto px-6 py-14 text-dispute">{error}</div>;
   if (!dispute) return <div className="max-w-6xl mx-auto px-6 py-14 text-muted">Loading courtroom…</div>;
 
+  const isClaimant = address?.toLowerCase() === dispute.claimant.toLowerCase();
   const isRespondent = address?.toLowerCase() === dispute.respondent.toLowerCase();
-  const isParty =
-    address &&
-    (address.toLowerCase() === dispute.claimant.toLowerCase() ||
-      address.toLowerCase() === dispute.respondent.toLowerCase());
+  const isParty = isClaimant || isRespondent;
+  const canEditEvidence = !["finalized", "under_appeal"].includes(dispute.status);
+  const hasVerifiedEvidence = [...evidence.claimant, ...evidence.respondent].some(
+    (e) => e.status === "verified"
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-14">
@@ -81,7 +90,14 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
           <p className="text-sm text-parchment/90 leading-relaxed">
             {dispute.claim_summary}
           </p>
-          <EvidenceRail urls={dispute.evidence_urls} label="Evidence" />
+          <EvidenceRail
+            disputeId={disputeId}
+            side="claimant"
+            label="Evidence"
+            items={evidence.claimant}
+            canAdd={canEditEvidence && isClaimant}
+            onChanged={load}
+          />
           {dispute.verdict && (
             <p className="font-mono text-xs text-muted">
               score after verdict: {dispute.verdict.claimant_score}
@@ -115,8 +131,12 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
                 {dispute.response_summary || "No response was submitted."}
               </p>
               <EvidenceRail
-                urls={dispute.counter_evidence_urls}
+                disputeId={disputeId}
+                side="respondent"
                 label="Counter-evidence"
+                items={evidence.respondent}
+                canAdd={canEditEvidence && isRespondent}
+                onChanged={load}
               />
               {dispute.verdict && (
                 <p className="font-mono text-xs text-muted">
@@ -145,13 +165,22 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
         )}
 
         {dispute.status === "awaiting_verdict" && (
-          <button
-            onClick={() => runAction("request_verdict", [disputeId])}
-            disabled={busy === "request_verdict"}
-            className="mt-4 bg-gold text-ink font-mono text-sm px-5 py-3 rounded-sm hover:opacity-90 disabled:opacity-50"
-          >
-            {busy === "request_verdict" ? "Validators deliberating…" : "Request Verdict"}
-          </button>
+          <div className="mt-4">
+            <button
+              onClick={() => runAction("request_verdict", [disputeId])}
+              disabled={busy === "request_verdict" || !hasVerifiedEvidence}
+              className="bg-gold text-ink font-mono text-sm px-5 py-3 rounded-sm hover:opacity-90 disabled:opacity-50"
+            >
+              {busy === "request_verdict" ? "Validators deliberating…" : "Request Verdict"}
+            </button>
+            {!hasVerifiedEvidence && (
+              <p className="text-xs text-muted italic mt-2">
+                At least one evidence item must be verified (fetched and
+                hashed by GenLayer validators) before a verdict can be
+                requested.
+              </p>
+            )}
+          </div>
         )}
 
         {dispute.verdict && (

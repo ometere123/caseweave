@@ -10,7 +10,7 @@
 ## Deployed Contract
 
 - **Contract**: `CaseWeaveCourt`
-- **Address**: `0xec393236E39578d19081687f2F27d801212f8194`
+- **Address**: `0x322b999682CdDecE9b7e704541F86dC86D18D35a`
 - **Source**: [contracts/caseweave.py](contracts/caseweave.py)
 
 Redeploy with:
@@ -20,6 +20,70 @@ genlayer deploy --contract contracts/caseweave.py
 ```
 
 Then update `CASEWEAVE_CONTRACT_ADDRESS` in [app/lib/contract.ts](app/lib/contract.ts).
+
+Redeploying always produces a new address with empty state — GenLayer has no
+in-place contract upgrade in this setup. Any storage/schema change requires a
+fresh deploy and re-running the demo data.
+
+### Prior deployments (superseded)
+
+- `0xCdB3EDb59f582bdbDcf6fe153ed79E7b5290dc49` — v2, added real on-chain
+  timestamps, but evidence was still raw URL strings passed into the verdict
+  prompt as text, never actually fetched.
+- `0xec393236E39578d19081687f2F27d801212f8194` — v1, first working deploy;
+  `created_at`/`updated_at`/etc. are all placeholder zeros.
+
+Kept here for reference only; the frontend no longer points at either.
+
+## On-chain timestamps
+
+Every write that creates or transitions an object stamps it with
+`gl.message_raw["datetime"]` — GenVM's transaction-pinned clock, which every
+validator sees identically, so it's safe to use in deterministic contract
+code (unlike a normal `time.time()`/`datetime.now()` call, which would differ
+per validator and break consensus). Fields:
+
+- `Agreement.created_at` / `updated_at`
+- `Dispute.filed_at` / `responded_at` / `resolved_at`
+- `PrecedentCase.created_at`
+- `Appeal.filed_at` / `resolved_at`
+- `EvidenceItem.verified_at`
+
+`list_recent_precedents` sorts by `created_at`, and the Precedent Library's
+date-range filter and "Recently created" sort in the frontend both use these
+real values.
+
+## Evidence fetching (v3)
+
+`file_dispute`/`submit_response`/`add_evidence` store each URL as an
+`EvidenceItem` (composite key `{dispute_id}:{side}:{index}`) with status
+`unverified` or `invalid_url` — validated for shape only (`https://`, no
+localhost/private-IP hosts, length cap), never fetched at submission time, so
+one bad link never blocks filing a dispute.
+
+`verify_evidence_url(dispute_id, side, evidence_index)` is where the real
+work happens: every validator independently calls
+`gl.nondet.web.request(url, method="GET")`, SHA-256 hashes the response
+body, and (if the fetch succeeded) asks an LLM to extract only the
+dispute-relevant facts. All of it settles in one
+`gl.eq_principle.prompt_comparative` round — exact agreement required on
+`http_status` and `content_hash`, loose agreement on the summary/quote
+wording.
+
+`request_verdict` now hard-requires at least one `verified` evidence item
+(across either side) before it will run, and the verdict prompt is
+explicitly instructed to weight verified evidence over unverified links and
+to treat failed/invalid URLs as no proof at all.
+
+**Implementation note worth keeping**: the GenLayer docs and several
+examples reference `response.status_code` on the object returned by
+`gl.nondet.web.request`. On the studionet build behind this deployment, that
+attribute doesn't exist — the real attribute is `response.status`. Confirmed
+empirically by deploying a throwaway probe contract that did
+`",".join(dir(response))` inside a `strict_eq` block, which returned
+`body,headers,status`. If evidence verification starts throwing
+`AttributeError` after a GenVM upgrade, check this first before assuming the
+contract logic is wrong.
 
 ## Test Accounts (studionet, local keystores)
 
@@ -35,12 +99,18 @@ with real value — they are local development keys only.
 Switch active account: `genlayer account use <name>`
 Unlock: `genlayer account unlock --account <name> --password <password>`
 
-## Verified real-data run
+## Verified real-data run (current deployment)
 
-`AGR_1` (DAO Frontend Build Grant) → `DIS_1` (refund dispute over incomplete
-wallet connection) → precedent search (no prior cases, correctly reasoned) →
-verdict (`revision_required`, 95% confidence) → finalized as `CASE_1`, the
-first precedent in the memory layer.
+`AGR_1` (evidence test bounty) → `DIS_1` (builder disputes claim of a
+missing README) → three evidence URLs submitted: one real, commit-pinned
+GitHub raw file; one `http://localhost:9999/fake` (correctly rejected as
+`invalid_url` before any fetch); one nonexistent domain. The real URL was
+verified: validators fetched it, agreed on HTTP 200 and one SHA-256 hash,
+and produced a matching evidence summary and quote. `request_verdict` then
+ran only because that verified item existed, correctly weighing it over the
+claimant's own unverified/invalid links → verdict `no_breach`, 95%
+confidence, explicitly citing the verified evidence as contradicting the
+claimant's claim → finalized as `CASE_1`.
 
 ## Frontend
 

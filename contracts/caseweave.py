@@ -2,8 +2,15 @@
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 import json
+import hashlib
 from dataclasses import dataclass
 from genlayer import *
+
+MAX_EVIDENCE_URL_LENGTH = 2048
+
+EVIDENCE_STATUSES = {
+    "unverified", "verified", "failed_fetch", "invalid_url", "unstable", "not_relevant",
+}
 
 ALLOWED_AGREEMENT_TYPES = {
     "freelance", "grant", "dao_mandate", "creator_collaboration",
@@ -54,7 +61,8 @@ class Agreement:
     title: str
     agreement_text: str
     agreement_type: str
-    created_at: u256
+    created_at: str
+    updated_at: str
     status: str
     stake_amount: u256
     precedent_policy: str
@@ -73,10 +81,14 @@ class Dispute:
     evidence_urls_json: str
     counter_evidence_urls_json: str
     response_summary: str
-    created_at: u256
+    filed_at: str
+    responded_at: str
+    resolved_at: str
     status: str
     final_case_id: str
     appeal_count: u256
+    claimant_evidence_count: u256
+    respondent_evidence_count: u256
     precedent_search_json: str
     verdict_json: str
 
@@ -94,7 +106,7 @@ class PrecedentCase:
     outcome: str
     precedent_strength: u256
     tags_json: str
-    created_at: u256
+    created_at: str
     citation_count: u256
     negative_treatment_count: u256
     status: str
@@ -111,6 +123,23 @@ class Appeal:
     status: str
     requested_change: str
     result: str
+    filed_at: str
+    resolved_at: str
+
+
+@allow_storage
+@dataclass
+class EvidenceItem:
+    url: str
+    side: str
+    status: str
+    http_status: u256
+    content_hash: str
+    content_type: str
+    evidence_summary: str
+    short_quote: str
+    verified_at: str
+    verified_seq: u256
 
 
 class CaseWeaveCourt(gl.Contract):
@@ -120,17 +149,20 @@ class CaseWeaveCourt(gl.Contract):
     case_treatments_json: TreeMap[str, str]
     agreement_cases_json: TreeMap[str, str]
     appeals: TreeMap[str, Appeal]
+    evidence_items: TreeMap[str, EvidenceItem]
 
     agreement_counter: u256
     dispute_counter: u256
     case_counter: u256
     appeal_counter: u256
+    evidence_counter: u256
 
     def __init__(self):
         self.agreement_counter = u256(0)
         self.dispute_counter = u256(0)
         self.case_counter = u256(0)
         self.appeal_counter = u256(0)
+        self.evidence_counter = u256(0)
 
     # ------------------------------------------------------------------
     # Agreements
@@ -161,6 +193,8 @@ class CaseWeaveCourt(gl.Contract):
         if stake_amount < 0:
             raise Exception("stake_amount must be >= 0")
 
+        now_iso: str = gl.message_raw["datetime"]
+
         self.agreement_counter += 1
         agreement_id = f"AGR_{int(self.agreement_counter)}"
 
@@ -171,7 +205,8 @@ class CaseWeaveCourt(gl.Contract):
             title=title,
             agreement_text=agreement_text,
             agreement_type=agreement_type,
-            created_at=u256(0),
+            created_at=now_iso,
+            updated_at=now_iso,
             status="pending_acceptance",
             stake_amount=u256(stake_amount),
             precedent_policy=precedent_policy,
@@ -188,6 +223,7 @@ class CaseWeaveCourt(gl.Contract):
         if agreement.status != "pending_acceptance":
             raise Exception("agreement is not pending acceptance")
         agreement.status = "active"
+        agreement.updated_at = gl.message_raw["datetime"]
 
     # ------------------------------------------------------------------
     # Disputes
@@ -215,6 +251,8 @@ class CaseWeaveCourt(gl.Contract):
 
         respondent = agreement.counterparty if sender == agreement.creator else agreement.creator
 
+        now_iso: str = gl.message_raw["datetime"]
+
         self.dispute_counter += 1
         dispute_id = f"DIS_{int(self.dispute_counter)}"
 
@@ -228,14 +266,24 @@ class CaseWeaveCourt(gl.Contract):
             evidence_urls_json=json.dumps(evidence_urls),
             counter_evidence_urls_json=json.dumps([]),
             response_summary="",
-            created_at=u256(0),
+            filed_at=now_iso,
+            responded_at="",
+            resolved_at="",
             status="awaiting_response",
             final_case_id="",
             appeal_count=u256(0),
+            claimant_evidence_count=u256(0),
+            respondent_evidence_count=u256(0),
             precedent_search_json="",
             verdict_json="",
         )
         agreement.status = "disputed"
+        agreement.updated_at = now_iso
+
+        dispute = self.disputes[dispute_id]
+        for url in evidence_urls:
+            self._create_evidence_item(dispute, dispute_id, "claimant", url)
+
         return dispute_id
 
     @gl.public.write
@@ -250,7 +298,191 @@ class CaseWeaveCourt(gl.Contract):
 
         dispute.response_summary = response_summary
         dispute.counter_evidence_urls_json = json.dumps(counter_evidence_urls)
+        dispute.responded_at = gl.message_raw["datetime"]
         dispute.status = "awaiting_precedent_search"
+
+        for url in counter_evidence_urls:
+            self._create_evidence_item(dispute, dispute_id, "respondent", url)
+
+    # ------------------------------------------------------------------
+    # Evidence (fetched and verified through GenLayer web access)
+    # ------------------------------------------------------------------
+
+    def _evidence_key(self, dispute_id: str, side: str, index: int) -> str:
+        return f"{dispute_id}:{side}:{index}"
+
+    def _is_private_or_local_host(self, host: str) -> bool:
+        if host in ("localhost", "127.0.0.1", "0.0.0.0", "::1"):
+            return True
+        if host.startswith("169.254.") or host.startswith("10.") or host.startswith("192.168."):
+            return True
+        if host.startswith("172."):
+            parts = host.split(".")
+            if len(parts) > 1:
+                try:
+                    second_octet = int(parts[1])
+                    if 16 <= second_octet <= 31:
+                        return True
+                except ValueError:
+                    pass
+        return False
+
+    def _evidence_url_status(self, url: str) -> str:
+        if not url or len(url.strip()) == 0:
+            return "invalid_url"
+        if len(url) > MAX_EVIDENCE_URL_LENGTH:
+            return "invalid_url"
+        if not url.startswith("https://"):
+            return "invalid_url"
+
+        host = url[len("https://"):].split("/")[0].split(":")[0].lower()
+        if self._is_private_or_local_host(host):
+            return "invalid_url"
+
+        return "unverified"
+
+    def _create_evidence_item(self, dispute: Dispute, dispute_id: str, side: str, url: str) -> int:
+        if side == "claimant":
+            index = int(dispute.claimant_evidence_count)
+            dispute.claimant_evidence_count += 1
+        else:
+            index = int(dispute.respondent_evidence_count)
+            dispute.respondent_evidence_count += 1
+
+        key = self._evidence_key(dispute_id, side, index)
+        self.evidence_items[key] = EvidenceItem(
+            url=url,
+            side=side,
+            status=self._evidence_url_status(url),
+            http_status=u256(0),
+            content_hash="",
+            content_type="",
+            evidence_summary="",
+            short_quote="",
+            verified_at="",
+            verified_seq=u256(0),
+        )
+        return index
+
+    @gl.public.write
+    def add_evidence(self, dispute_id: str, side: str, url: str) -> int:
+        if side not in ("claimant", "respondent"):
+            raise Exception("side must be claimant or respondent")
+
+        dispute = self.disputes[dispute_id]
+        sender = gl.message.sender_address
+        expected = dispute.claimant if side == "claimant" else dispute.respondent
+        if sender != expected:
+            raise Exception("only the matching party may add evidence for that side")
+        if dispute.status in ("finalized", "under_appeal"):
+            raise Exception("dispute is no longer accepting evidence")
+
+        return self._create_evidence_item(dispute, dispute_id, side, url)
+
+    @gl.public.write
+    def verify_evidence_url(self, dispute_id: str, side: str, evidence_index: int) -> dict:
+        if side not in ("claimant", "respondent"):
+            raise Exception("side must be claimant or respondent")
+
+        dispute = self.disputes[dispute_id]
+        key = self._evidence_key(dispute_id, side, evidence_index)
+        if key not in self.evidence_items:
+            raise Exception("evidence item not found")
+
+        evidence = self.evidence_items[key]
+        if evidence.status == "invalid_url":
+            raise gl.vm.UserError("cannot verify an invalid evidence URL")
+        if not evidence.url.startswith("https://"):
+            raise gl.vm.UserError("only https evidence URLs are allowed")
+
+        url = evidence.url
+        claim_summary = dispute.claim_summary
+
+        def verify_and_summarize() -> str:
+            response = gl.nondet.web.request(url, method="GET")
+            http_status = int(response.status)
+
+            if http_status >= 400:
+                return json.dumps({
+                    "status": "failed_fetch",
+                    "http_status": http_status,
+                    "content_hash": "",
+                    "content_type": "",
+                    "evidence_summary": "",
+                    "short_quote": "",
+                }, sort_keys=True)
+
+            body = response.body
+            content_hash = hashlib.sha256(body).hexdigest()
+
+            try:
+                text = body.decode("utf-8", errors="replace")
+            except Exception:
+                text = ""
+            text = text[:6000]
+
+            prompt = f"""
+You are verifying evidence for a CaseWeave dispute on GenLayer.
+
+Dispute claim:
+{claim_summary}
+
+Fetched web evidence content (truncated):
+{text}
+
+Extract only facts from the fetched content that are directly relevant to the
+dispute claim above. Do not invent facts that are not present in the content.
+
+Return only canonical JSON matching this schema, nothing else:
+{{
+  "status": "verified|not_relevant|unstable",
+  "evidence_summary": "concise summary under 300 characters of the dispute-relevant facts found",
+  "short_quote": "a short supporting quote under 200 characters from the content, or empty string",
+  "supports_side": "claimant|respondent|unclear"
+}}
+Do not include markdown or private reasoning.
+"""
+            llm_result = gl.nondet.exec_prompt(prompt).replace("```json", "").replace("```", "").strip()
+            parsed = json.loads(llm_result)
+
+            return json.dumps({
+                "status": str(parsed.get("status", "unstable")),
+                "http_status": http_status,
+                "content_hash": content_hash,
+                "content_type": "",
+                "evidence_summary": str(parsed.get("evidence_summary", ""))[:400],
+                "short_quote": str(parsed.get("short_quote", ""))[:250],
+            }, sort_keys=True)
+
+        result_json = gl.eq_principle.prompt_comparative(
+            verify_and_summarize,
+            principle=(
+                "Two results are equivalent only if they agree exactly on "
+                "http_status and content_hash (these are objective facts about "
+                "the fetched response and must match precisely). The status "
+                "field must also agree, except that a byte-for-byte identical "
+                "content_hash always implies agreement regardless of status "
+                "wording. evidence_summary and short_quote do not need to "
+                "match wording, only convey the same meaning."
+            ),
+        )
+        result = json.loads(result_json)
+
+        status = str(result.get("status", "unstable"))
+        if status not in EVIDENCE_STATUSES or status in ("unverified", "invalid_url"):
+            status = "unstable"
+
+        evidence.status = status
+        evidence.http_status = u256(int(result.get("http_status", 0)))
+        evidence.content_hash = str(result.get("content_hash", ""))
+        evidence.content_type = str(result.get("content_type", ""))
+        evidence.evidence_summary = str(result.get("evidence_summary", ""))
+        evidence.short_quote = str(result.get("short_quote", ""))
+        evidence.verified_at = gl.message_raw["datetime"]
+        self.evidence_counter += 1
+        evidence.verified_seq = self.evidence_counter
+
+        return self._evidence_to_dict(evidence)
 
     # ------------------------------------------------------------------
     # Precedent search (non-deterministic)
@@ -325,6 +557,14 @@ Do not include markdown or private reasoning.
     # Verdict (non-deterministic)
     # ------------------------------------------------------------------
 
+    def _evidence_for_side(self, dispute_id: str, side: str, count: int) -> list[dict]:
+        items = []
+        for i in range(count):
+            key = self._evidence_key(dispute_id, side, i)
+            if key in self.evidence_items:
+                items.append(self._evidence_to_dict(self.evidence_items[key]))
+        return items
+
     @gl.public.write
     def request_verdict(self, dispute_id: str) -> dict:
         dispute = self.disputes[dispute_id]
@@ -335,6 +575,20 @@ Do not include markdown or private reasoning.
         relevant_cases = []
         if dispute.precedent_search_json:
             relevant_cases = json.loads(dispute.precedent_search_json).get("relevant_cases", [])
+
+        claimant_evidence = self._evidence_for_side(
+            dispute_id, "claimant", int(dispute.claimant_evidence_count)
+        )
+        respondent_evidence = self._evidence_for_side(
+            dispute_id, "respondent", int(dispute.respondent_evidence_count)
+        )
+        verified_count = sum(
+            1 for e in claimant_evidence + respondent_evidence if e["status"] == "verified"
+        )
+        if verified_count == 0:
+            raise Exception(
+                "at least one verified evidence item is required before a verdict can be requested"
+            )
 
         def get_verdict() -> str:
             prompt = f"""
@@ -355,21 +609,32 @@ Claimant claim summary:
 
 Claimant requested outcome: {dispute.requested_outcome}
 
-Claimant evidence URLs:
-{dispute.evidence_urls_json}
+Claimant evidence (fetched and verified by GenLayer validators, JSON):
+{json.dumps(claimant_evidence)}
 
 Respondent response summary:
 {dispute.response_summary}
 
-Respondent counter-evidence URLs:
-{dispute.counter_evidence_urls_json}
+Respondent evidence (fetched and verified by GenLayer validators, JSON):
+{json.dumps(respondent_evidence)}
 
 Relevant prior precedent cases (JSON):
 {json.dumps(relevant_cases)}
 
+Evidence weighting rules:
+- Give more weight to evidence with status "verified" (its content was
+  independently fetched and hashed by GenLayer validators, and its
+  evidence_summary reflects what was actually found at the URL).
+- Treat "unverified" evidence as a weak reference only. Its URL has not been
+  fetched, so do not assume it supports either party's claim.
+- Treat "failed_fetch" and "invalid_url" evidence as no proof at all of the
+  underlying claim, only as evidence that a link was supplied.
+- Do not assume a URL supports a claim unless its evidence_summary explicitly
+  supports it.
+
 Evaluate:
 1. What obligation was created by the agreement?
-2. What facts are supported by the evidence?
+2. What facts are supported by the verified evidence?
 3. Which prior cases are materially similar?
 4. Which prior cases are distinguishable?
 5. Whether any prior rule should be strengthened, weakened, or overturned.
@@ -437,6 +702,7 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
             raise Exception("precedent_alignment invalid")
 
         agreement = self.agreements[dispute.agreement_id]
+        now_iso: str = gl.message_raw["datetime"]
 
         self.case_counter += 1
         case_id = f"CASE_{int(self.case_counter)}"
@@ -455,7 +721,7 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
             outcome=str(verdict.get("verdict", "")),
             precedent_strength=u256(strength),
             tags_json=json.dumps(verdict.get("tags", [])),
-            created_at=u256(0),
+            created_at=now_iso,
             citation_count=u256(0),
             negative_treatment_count=u256(0),
             status="active",
@@ -478,8 +744,10 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
         self.agreement_cases_json[dispute.agreement_id] = json.dumps(existing_cases)
 
         dispute.final_case_id = case_id
+        dispute.resolved_at = now_iso
         dispute.status = "finalized"
         agreement.status = "resolved"
+        agreement.updated_at = now_iso
 
         return case_id
 
@@ -535,6 +803,8 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
             status="under_review",
             requested_change=requested_change,
             result="",
+            filed_at=gl.message_raw["datetime"],
+            resolved_at="",
         )
         dispute.appeal_count += 1
         dispute.status = "under_appeal"
@@ -550,6 +820,7 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
 
         appeal.result = result
         appeal.status = "resolved"
+        appeal.resolved_at = gl.message_raw["datetime"]
 
         dispute = self.disputes[appeal.dispute_id]
         dispute.status = "finalized"
@@ -577,6 +848,8 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
             "stake_amount": int(agreement.stake_amount),
             "precedent_policy": agreement.precedent_policy,
             "tags": json.loads(agreement.tags_json),
+            "created_at": agreement.created_at,
+            "updated_at": agreement.updated_at,
         }
 
     def _dispute_to_dict(self, dispute: Dispute) -> dict:
@@ -590,11 +863,30 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
             "evidence_urls": json.loads(dispute.evidence_urls_json),
             "counter_evidence_urls": json.loads(dispute.counter_evidence_urls_json),
             "response_summary": dispute.response_summary,
+            "filed_at": dispute.filed_at,
+            "responded_at": dispute.responded_at,
+            "resolved_at": dispute.resolved_at,
             "status": dispute.status,
             "final_case_id": dispute.final_case_id,
             "appeal_count": int(dispute.appeal_count),
+            "claimant_evidence_count": int(dispute.claimant_evidence_count),
+            "respondent_evidence_count": int(dispute.respondent_evidence_count),
             "precedent_search": json.loads(dispute.precedent_search_json) if dispute.precedent_search_json else None,
             "verdict": json.loads(dispute.verdict_json) if dispute.verdict_json else None,
+        }
+
+    def _evidence_to_dict(self, evidence: EvidenceItem) -> dict:
+        return {
+            "url": evidence.url,
+            "side": evidence.side,
+            "status": evidence.status,
+            "http_status": int(evidence.http_status),
+            "content_hash": evidence.content_hash,
+            "content_type": evidence.content_type,
+            "evidence_summary": evidence.evidence_summary,
+            "short_quote": evidence.short_quote,
+            "verified_at": evidence.verified_at,
+            "verified_seq": int(evidence.verified_seq),
         }
 
     def _case_to_dict(self, case: PrecedentCase) -> dict:
@@ -612,6 +904,7 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
             "citation_count": int(case.citation_count),
             "negative_treatment_count": int(case.negative_treatment_count),
             "status": case.status,
+            "created_at": case.created_at,
         }
 
     def _appeal_to_dict(self, appeal: Appeal) -> dict:
@@ -624,6 +917,8 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
             "status": appeal.status,
             "requested_change": appeal.requested_change,
             "result": appeal.result,
+            "filed_at": appeal.filed_at,
+            "resolved_at": appeal.resolved_at,
         }
 
     @gl.public.view
@@ -650,6 +945,25 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
     def get_dispute_verdict(self, dispute_id: str) -> dict:
         dispute = self.disputes[dispute_id]
         return json.loads(dispute.verdict_json) if dispute.verdict_json else {}
+
+    @gl.public.view
+    def get_evidence_item(self, dispute_id: str, side: str, evidence_index: int) -> dict:
+        key = self._evidence_key(dispute_id, side, evidence_index)
+        return self._evidence_to_dict(self.evidence_items[key])
+
+    @gl.public.view
+    def list_evidence_for_dispute(self, dispute_id: str) -> dict:
+        dispute = self.disputes[dispute_id]
+        claimant_items = self._evidence_for_side(
+            dispute_id, "claimant", int(dispute.claimant_evidence_count)
+        )
+        respondent_items = self._evidence_for_side(
+            dispute_id, "respondent", int(dispute.respondent_evidence_count)
+        )
+        return {
+            "claimant": claimant_items,
+            "respondent": respondent_items,
+        }
 
     @gl.public.view
     def get_precedent_case(self, case_id: str) -> dict:
@@ -679,7 +993,7 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
     @gl.public.view
     def list_recent_precedents(self, limit: int) -> dict:
         items = list(self.precedents.items())
-        items.sort(key=lambda kv: int(kv[0].split("_")[1]), reverse=True)
+        items.sort(key=lambda kv: kv[1].created_at, reverse=True)
         return {k: self._case_to_dict(v) for k, v in items[:limit]}
 
     @gl.public.view

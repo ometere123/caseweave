@@ -32,6 +32,8 @@ export default function PrecedentLibraryPage() {
   const [tagFilter, setTagFilter] = useState("");
   const [minStrength, setMinStrength] = useState(0);
   const [citedOftenOnly, setCitedOftenOnly] = useState(false);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     readContract("list_recent_precedents", [500])
@@ -49,6 +51,8 @@ export default function PrecedentLibraryPage() {
     );
   if (minStrength > 0) entries = entries.filter((c) => c.precedent_strength >= minStrength);
   if (citedOftenOnly) entries = entries.filter((c) => c.citation_count > 0);
+  if (dateFrom) entries = entries.filter((c) => c.created_at >= dateFrom);
+  if (dateTo) entries = entries.filter((c) => c.created_at <= `${dateTo}T23:59:59.999999Z`);
 
   entries = [...entries].sort((a, b) => {
     switch (sort) {
@@ -63,7 +67,7 @@ export default function PrecedentLibraryPage() {
       case "distinguished":
         return b.negative_treatment_count - a.negative_treatment_count;
       default:
-        return b.case_id.localeCompare(a.case_id, undefined, { numeric: true });
+        return b.created_at.localeCompare(a.created_at);
     }
   });
 
@@ -123,6 +127,27 @@ export default function PrecedentLibraryPage() {
           onChange={(e) => setTagFilter(e.target.value)}
           className="bg-charcoal border border-line/50 rounded-sm px-3 py-2 text-sm text-paper font-mono"
         />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <label className="flex items-center gap-2 text-xs font-mono text-muted">
+          from
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="bg-charcoal border border-line/50 rounded-sm px-2 py-1.5 text-sm text-paper font-mono"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-xs font-mono text-muted">
+          to
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="bg-charcoal border border-line/50 rounded-sm px-2 py-1.5 text-sm text-paper font-mono"
+          />
+        </label>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 mb-8">

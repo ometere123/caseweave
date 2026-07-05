@@ -16,6 +16,13 @@ export function CaseMemoryCard({ precedentCase }: { precedentCase: PrecedentCase
         <span className="font-mono text-sm text-gold">{c.case_id}</span>
         <span className="font-mono text-[11px] uppercase text-muted">{c.status}</span>
       </div>
+      <p className="font-mono text-[10px] text-muted mt-0.5">
+        {new Date(c.created_at).toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        })}
+      </p>
       <p className="font-display text-lg text-paper mt-1">{c.holding}</p>
       <p className="text-xs text-parchment/70 mt-2 line-clamp-2">{c.fact_pattern_summary}</p>
       <div className="flex flex-wrap gap-1 mt-2">

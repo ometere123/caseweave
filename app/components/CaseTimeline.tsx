@@ -1,6 +1,14 @@
 import type { Agreement, Dispute } from "../lib/contract";
 
-type Step = { label: string; done: boolean };
+type Step = { label: string; done: boolean; at?: string };
+
+function formatTime(iso?: string) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
 
 function disputeSteps(dispute: Dispute): Step[] {
   const order = [
@@ -12,11 +20,18 @@ function disputeSteps(dispute: Dispute): Step[] {
   ];
   const idx = order.indexOf(dispute.status);
   return [
-    { label: "Dispute filed", done: true },
-    { label: "Response submitted", done: idx >= 1 },
-    { label: "Precedent search requested", done: idx >= 2 || !!dispute.precedent_search },
+    { label: "Dispute filed", done: true, at: dispute.filed_at },
+    { label: "Response submitted", done: idx >= 1, at: dispute.responded_at },
+    {
+      label: "Precedent search requested",
+      done: idx >= 2 || !!dispute.precedent_search,
+    },
     { label: "Verdict reached", done: idx >= 3 || !!dispute.verdict },
-    { label: "Precedent finalized", done: idx >= 4 || !!dispute.final_case_id },
+    {
+      label: "Precedent finalized",
+      done: idx >= 4 || !!dispute.final_case_id,
+      at: dispute.resolved_at,
+    },
   ];
 }
 
@@ -32,6 +47,11 @@ export function CaseTimeline({
       <div className="flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-verdict" />
         <span className="text-sm text-parchment/90">Agreement created</span>
+        {formatTime(agreement.created_at) && (
+          <span className="font-mono text-[10px] text-muted ml-auto">
+            {formatTime(agreement.created_at)}
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <span
@@ -44,6 +64,11 @@ export function CaseTimeline({
             ? "Awaiting counterparty acceptance"
             : "Accepted by counterparty"}
         </span>
+        {agreement.status !== "pending_acceptance" && formatTime(agreement.updated_at) && (
+          <span className="font-mono text-[10px] text-muted ml-auto">
+            {formatTime(agreement.updated_at)}
+          </span>
+        )}
       </div>
 
       {disputes.map((d) => (
@@ -63,6 +88,11 @@ export function CaseTimeline({
               >
                 {step.label}
               </span>
+              {step.done && formatTime(step.at) && (
+                <span className="font-mono text-[10px] text-muted ml-auto">
+                  {formatTime(step.at)}
+                </span>
+              )}
             </div>
           ))}
         </div>

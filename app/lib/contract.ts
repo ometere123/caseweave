@@ -1,5 +1,14 @@
 export const CASEWEAVE_CONTRACT_ADDRESS =
-  "0xec393236E39578d19081687f2F27d801212f8194" as const;
+  "0x322b999682CdDecE9b7e704541F86dC86D18D35a" as const;
+
+export const EVIDENCE_STATUSES = [
+  "unverified",
+  "verified",
+  "failed_fetch",
+  "invalid_url",
+  "unstable",
+  "not_relevant",
+] as const;
 
 export const STUDIONET_CHAIN_ID = 61999;
 
@@ -57,6 +66,8 @@ export type Agreement = {
   stake_amount: number;
   precedent_policy: string;
   tags: string[];
+  created_at: string;
+  updated_at: string;
 };
 
 export type Dispute = {
@@ -69,11 +80,29 @@ export type Dispute = {
   evidence_urls: string[];
   counter_evidence_urls: string[];
   response_summary: string;
+  filed_at: string;
+  responded_at: string;
+  resolved_at: string;
   status: string;
   final_case_id: string;
   appeal_count: number;
+  claimant_evidence_count: number;
+  respondent_evidence_count: number;
   precedent_search: PrecedentSearchResult | null;
   verdict: Verdict | null;
+};
+
+export type EvidenceItem = {
+  url: string;
+  side: "claimant" | "respondent";
+  status: string;
+  http_status: number;
+  content_hash: string;
+  content_type: string;
+  evidence_summary: string;
+  short_quote: string;
+  verified_at: string;
+  verified_seq: number;
 };
 
 export type PrecedentSearchResult = {
@@ -119,6 +148,7 @@ export type PrecedentCase = {
   citation_count: number;
   negative_treatment_count: number;
   status: string;
+  created_at: string;
 };
 
 export type CaseTreatment = {
@@ -138,4 +168,6 @@ export type Appeal = {
   status: string;
   requested_change: string;
   result: string;
+  filed_at: string;
+  resolved_at: string;
 };

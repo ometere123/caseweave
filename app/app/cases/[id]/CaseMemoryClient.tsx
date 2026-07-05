@@ -47,6 +47,11 @@ export function CaseMemoryClient({ caseId }: { caseId: string }) {
       </div>
       <p className="font-mono text-xs text-muted mb-6">
         {precedentCase.agreement_type.replace(/_/g, " ")} · outcome: {precedentCase.outcome.replace(/_/g, " ")}
+        {" · "}
+        {new Date(precedentCase.created_at).toLocaleString(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })}
       </p>
 
       {overturned && (
