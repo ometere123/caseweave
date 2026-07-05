@@ -54,7 +54,7 @@ export async function connectInjectedWallet(): Promise<Address> {
       ],
     });
   } catch {
-    // Wallet may already have the chain, or user rejected — non-fatal for read/demo purposes.
+    // Wallet may already have the chain, or user rejected - non-fatal for read/demo purposes.
   }
 
   return accounts[0] as Address;

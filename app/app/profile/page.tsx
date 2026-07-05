@@ -131,7 +131,7 @@ export default function ProfilePage() {
             Reputation as claimant
           </p>
           <p className="font-mono text-2xl text-paper">
-            {claimantWinRate === null ? "—" : `${claimantWinRate}%`}
+            {claimantWinRate === null ? "-" : `${claimantWinRate}%`}
           </p>
           <p className="text-[11px] text-muted mt-1">win rate across finalized disputes filed</p>
         </div>
@@ -140,7 +140,7 @@ export default function ProfilePage() {
             Reputation as respondent
           </p>
           <p className="font-mono text-2xl text-paper">
-            {respondentWinRate === null ? "—" : `${respondentWinRate}%`}
+            {respondentWinRate === null ? "-" : `${respondentWinRate}%`}
           </p>
           <p className="text-[11px] text-muted mt-1">win rate across finalized disputes responded to</p>
         </div>

@@ -44,7 +44,7 @@ export const useWallet = create<WalletState>()(
         //
         // Some extensions inject window.ethereum a tick after page load, so
         // if no provider is detected yet we keep the persisted address
-        // rather than wiping a valid session — only an explicit "no
+        // rather than wiping a valid session - only an explicit "no
         // authorized accounts" response from a present provider clears it.
         if (typeof window === "undefined" || !window.ethereum) {
           set({ hydrated: true });

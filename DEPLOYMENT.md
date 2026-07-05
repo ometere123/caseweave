@@ -1,4 +1,4 @@
-# CaseWeave — Deployment Reference
+# CaseWeave - Deployment Reference
 
 ## Network
 
@@ -21,16 +21,16 @@ genlayer deploy --contract contracts/caseweave.py
 
 Then update `CASEWEAVE_CONTRACT_ADDRESS` in [app/lib/contract.ts](app/lib/contract.ts).
 
-Redeploying always produces a new address with empty state — GenLayer has no
+Redeploying always produces a new address with empty state - GenLayer has no
 in-place contract upgrade in this setup. Any storage/schema change requires a
 fresh deploy and re-running the demo data.
 
 ### Prior deployments (superseded)
 
-- `0xCdB3EDb59f582bdbDcf6fe153ed79E7b5290dc49` — v2, added real on-chain
+- `0xCdB3EDb59f582bdbDcf6fe153ed79E7b5290dc49` - v2, added real on-chain
   timestamps, but evidence was still raw URL strings passed into the verdict
   prompt as text, never actually fetched.
-- `0xec393236E39578d19081687f2F27d801212f8194` — v1, first working deploy;
+- `0xec393236E39578d19081687f2F27d801212f8194` - v1, first working deploy;
   `created_at`/`updated_at`/etc. are all placeholder zeros.
 
 Kept here for reference only; the frontend no longer points at either.
@@ -38,7 +38,7 @@ Kept here for reference only; the frontend no longer points at either.
 ## On-chain timestamps
 
 Every write that creates or transitions an object stamps it with
-`gl.message_raw["datetime"]` — GenVM's transaction-pinned clock, which every
+`gl.message_raw["datetime"]` - GenVM's transaction-pinned clock, which every
 validator sees identically, so it's safe to use in deterministic contract
 code (unlike a normal `time.time()`/`datetime.now()` call, which would differ
 per validator and break consensus). Fields:
@@ -57,7 +57,7 @@ real values.
 
 `file_dispute`/`submit_response`/`add_evidence` store each URL as an
 `EvidenceItem` (composite key `{dispute_id}:{side}:{index}`) with status
-`unverified` or `invalid_url` — validated for shape only (`https://`, no
+`unverified` or `invalid_url` - validated for shape only (`https://`, no
 localhost/private-IP hosts, length cap), never fetched at submission time, so
 one bad link never blocks filing a dispute.
 
@@ -66,7 +66,7 @@ work happens: every validator independently calls
 `gl.nondet.web.request(url, method="GET")`, SHA-256 hashes the response
 body, and (if the fetch succeeded) asks an LLM to extract only the
 dispute-relevant facts. All of it settles in one
-`gl.eq_principle.prompt_comparative` round — exact agreement required on
+`gl.eq_principle.prompt_comparative` round - exact agreement required on
 `http_status` and `content_hash`, loose agreement on the summary/quote
 wording.
 
@@ -78,7 +78,7 @@ to treat failed/invalid URLs as no proof at all.
 **Implementation note worth keeping**: the GenLayer docs and several
 examples reference `response.status_code` on the object returned by
 `gl.nondet.web.request`. On the studionet build behind this deployment, that
-attribute doesn't exist — the real attribute is `response.status`. Confirmed
+attribute doesn't exist - the real attribute is `response.status`. Confirmed
 empirically by deploying a throwaway probe contract that did
 `",".join(dir(response))` inside a `strict_eq` block, which returned
 `body,headers,status`. If evidence verification starts throwing
@@ -88,7 +88,7 @@ contract logic is wrong.
 ## Test Accounts (studionet, local keystores)
 
 Keystores live in `~/.genlayer/keystores/`. Do not reuse these keys anywhere
-with real value — they are local development keys only.
+with real value - they are local development keys only.
 
 | Name    | Address                                      | Role in demo scenario |
 |---------|-----------------------------------------------|------------------------|

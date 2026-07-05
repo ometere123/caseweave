@@ -41,7 +41,7 @@ export default function LandingPage() {
         />
         <Section
           title="What becomes precedent"
-          body="Every finalized verdict creates a PrecedentCase: a fact pattern, legal issue, holding, and reasoning rule — plus how it treated the cases before it."
+          body="Every finalized verdict creates a PrecedentCase: a fact pattern, legal issue, holding, and reasoning rule - plus how it treated the cases before it."
         />
         <Section
           title="Built for web3 agreements"
@@ -57,7 +57,7 @@ export default function LandingPage() {
           A DAO agrees to pay a builder 1,000 GEN for a frontend prototype with
           wallet connection and public deployment. Wallet connection ships
           incomplete. An old case held that partial delivery deserves partial
-          release — but validators distinguish it here because wallet
+          release - but validators distinguish it here because wallet
           connection was an explicit core acceptance condition, and a new
           holding is created for future disputes to confront.
         </p>

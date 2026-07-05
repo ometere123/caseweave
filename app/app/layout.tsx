@@ -21,7 +21,7 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CaseWeave — Case Loom Console",
+  title: "CaseWeave - Case Loom Console",
   description:
     "A living common-law layer for web3 agreements, powered by GenLayer.",
   icons: {

@@ -129,7 +129,7 @@ export function EvidenceRail({
 
             {item.status === "verified" || item.status === "failed_fetch" ? (
               <div className="mt-1.5 space-y-1 font-mono text-[10px] text-muted">
-                <p>http status: {item.http_status || "—"}</p>
+                <p>http status: {item.http_status || "-"}</p>
                 {item.content_hash && (
                   <p className="break-all">sha256: {item.content_hash}</p>
                 )}
