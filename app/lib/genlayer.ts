@@ -1,10 +1,16 @@
 import { createClient, chains } from "genlayer-js";
-import type { Address } from "genlayer-js/types";
+import type { Address, CalldataEncodable } from "genlayer-js/types";
 import { CASEWEAVE_CONTRACT_ADDRESS } from "./contract";
+
+type EthereumProvider = {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on?: (event: string, handler: (accounts: string[]) => void) => void;
+  removeListener?: (event: string, handler: (accounts: string[]) => void) => void;
+};
 
 declare global {
   interface Window {
-    ethereum?: any;
+    ethereum?: EthereumProvider;
   }
 }
 
@@ -31,9 +37,9 @@ export function getWriteClient(account: Address) {
 
 export async function connectInjectedWallet(): Promise<Address> {
   const provider = getInjectedProvider();
-  const accounts: string[] = await provider.request({
+  const accounts = (await provider.request({
     method: "eth_requestAccounts",
-  });
+  })) as string[];
   if (!accounts || accounts.length === 0) {
     throw new Error("Wallet did not return an account.");
   }
@@ -63,9 +69,9 @@ export async function connectInjectedWallet(): Promise<Address> {
 export async function getAuthorizedAccount(): Promise<Address | null> {
   if (typeof window === "undefined" || !window.ethereum) return null;
   try {
-    const accounts: string[] = await window.ethereum.request({
+    const accounts = (await window.ethereum.request({
       method: "eth_accounts",
-    });
+    })) as string[];
     return accounts && accounts.length > 0 ? (accounts[0] as Address) : null;
   } catch {
     return null;
@@ -78,25 +84,28 @@ export function onAccountsChanged(handler: (accounts: string[]) => void) {
   return () => window.ethereum?.removeListener?.("accountsChanged", handler);
 }
 
-export async function readContract(functionName: string, args: unknown[] = []) {
+export async function readContract(
+  functionName: string,
+  args: CalldataEncodable[] = []
+) {
   const client = getReadClient();
   return client.readContract({
     address: CASEWEAVE_CONTRACT_ADDRESS,
     functionName,
-    args: args as any,
+    args,
   });
 }
 
 export async function writeContract(
   account: Address,
   functionName: string,
-  args: unknown[] = []
+  args: CalldataEncodable[] = []
 ) {
   const client = getWriteClient(account);
   const hash = await client.writeContract({
     address: CASEWEAVE_CONTRACT_ADDRESS,
     functionName,
-    args: args as any,
+    args,
     value: BigInt(0),
   });
   const receipt = await client.waitForTransactionReceipt({

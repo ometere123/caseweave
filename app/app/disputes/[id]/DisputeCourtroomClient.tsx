@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { readContract, writeContract } from "../../../lib/genlayer";
 import { useWallet } from "../../../store/useWallet";
 import type { Dispute, EvidenceItem } from "../../../lib/contract";
+import type { CalldataEncodable } from "genlayer-js/types";
 import { EvidenceRail } from "../../../components/EvidenceRail";
 import { PrecedentBench } from "../../../components/PrecedentBench";
 import { VerdictPanel } from "../../../components/VerdictPanel";
@@ -31,10 +32,12 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
   }, [disputeId]);
 
   useEffect(() => {
-    load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, [load]);
 
-  async function runAction(action: string, args: unknown[] = []) {
+  async function runAction(action: string, args: CalldataEncodable[] = []) {
     if (!address) return connect();
     setBusy(action);
     setError(null);
@@ -123,7 +126,7 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
                 busy={busy === "submit_response"}
               />
             ) : (
-              <p className="text-sm text-muted italic">Awaiting respondent's reply.</p>
+              <p className="text-sm text-muted italic">Awaiting respondent&apos;s reply.</p>
             )
           ) : (
             <>

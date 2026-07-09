@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CaseWeave Frontend
 
-## Getting Started
+Next.js app for the CaseWeave GenLayer contract. The UI lets parties create
+agreements, accept them, file disputes, verify evidence URLs through GenLayer
+validators, request precedent search, request a verdict, finalize precedent,
+and browse the resulting case memory graph.
 
-First, run the development server:
+## Run Locally
+
+```bash
+npm install
+npm run dev
+```
+
+Open http://localhost:3000 and connect an injected wallet such as MetaMask or
+Rabby. The wallet will be prompted to add GenLayer Studionet.
+
+## Environment
+
+Copy the root `.env.example` values into `app/.env.local` if you need to point
+the frontend at a different deployment.
+
+```bash
+NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS=0x322b999682CdDecE9b7e704541F86dC86D18D35a
+NEXT_PUBLIC_STUDIONET_CHAIN_ID=61999
+```
+
+The committed default contract address is also defined in
+`app/lib/contract.ts`, so the app works without a local env file for the
+current Studionet deployment.
+
+## Main Routes
+
+| Route | Purpose |
+| --- | --- |
+| `/` | Project entry point and product overview |
+| `/agreements` | Agreement docket |
+| `/agreements/new` | Create a new agreement |
+| `/agreements/[id]` | Agreement chamber: text, parties, disputes, related cases |
+| `/disputes/[id]` | Courtroom: briefs, evidence verification, precedent search, verdict |
+| `/cases` | Precedent library |
+| `/cases/[id]` | Case memory detail, holding, treatment graph |
+| `/graph` | Interactive precedent graph |
+| `/appeals` | Appeal docket |
+| `/profile` | Wallet-specific activity view |
+
+## Contract Flow Exposed By The UI
+
+1. Create an agreement with text, type, counterparty, stake, tags, and
+   precedent policy.
+2. Counterparty accepts the agreement.
+3. Either party files a dispute and supplies evidence URLs.
+4. Parties add more evidence as needed.
+5. Evidence URLs are verified by the contract with GenLayer web fetching and
+   validator consensus.
+6. A precedent search identifies materially relevant prior cases.
+7. A verdict can be requested only after at least one evidence item is
+   verified.
+8. Finalizing the verdict writes a reusable `PrecedentCase` into contract
+   storage and records treatment of cited cases.
+
+## Useful Scripts
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run build
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+For contract deployment details, see the root `DEPLOYMENT.md`.

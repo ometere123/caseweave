@@ -9,6 +9,18 @@ import {
   ALLOWED_PRECEDENT_POLICIES,
 } from "../../../lib/contract";
 
+type CreateAgreementReceipt = {
+  consensus_data?: {
+    leader_receipt?: {
+      result?: {
+        payload?: {
+          readable?: string;
+        };
+      };
+    }[];
+  };
+};
+
 export default function CreateAgreementPage() {
   const router = useRouter();
   const { address, connect } = useWallet();
@@ -53,8 +65,8 @@ export default function CreateAgreementPage() {
         precedentPolicy,
       ]);
 
-      const leaderResult = (receipt as any)?.consensus_data?.leader_receipt?.[0]
-        ?.result;
+      const leaderResult = (receipt as CreateAgreementReceipt)?.consensus_data
+        ?.leader_receipt?.[0]?.result;
       const agreementId: string | null =
         leaderResult?.payload?.readable?.replace(/"/g, "") ?? null;
 

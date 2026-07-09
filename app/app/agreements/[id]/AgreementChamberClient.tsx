@@ -32,7 +32,9 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
   }, [agreementId]);
 
   useEffect(() => {
-    load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, [load]);
 
   async function handleAccept() {

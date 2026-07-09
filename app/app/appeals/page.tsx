@@ -44,7 +44,9 @@ export default function AppealsPage() {
   }
 
   useEffect(() => {
-    load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {

@@ -15,18 +15,19 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!address) return;
-    setLoading(true);
-    setError(null);
+    const currentAddress = address;
 
-    (async () => {
+    async function loadProfile() {
+      setLoading(true);
+      setError(null);
       try {
         const allAgreements = Object.values(
           (await readContract("list_agreements")) as Record<string, Agreement>
         );
         const mine = allAgreements.filter(
           (a) =>
-            a.creator.toLowerCase() === address.toLowerCase() ||
-            a.counterparty.toLowerCase() === address.toLowerCase()
+            a.creator.toLowerCase() === currentAddress.toLowerCase() ||
+            a.counterparty.toLowerCase() === currentAddress.toLowerCase()
         );
         setAgreements(mine);
 
@@ -42,14 +43,20 @@ export default function ProfilePage() {
           (await readContract("list_appeals")) as Record<string, Appeal>
         );
         setAppeals(
-          allAppeals.filter((a) => a.appellant.toLowerCase() === address.toLowerCase())
+          allAppeals.filter(
+            (a) => a.appellant.toLowerCase() === currentAddress.toLowerCase()
+          )
         );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load profile");
       } finally {
         setLoading(false);
       }
-    })();
+    }
+
+    queueMicrotask(() => {
+      void loadProfile();
+    });
   }, [address]);
 
   if (!address) {

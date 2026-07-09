@@ -112,6 +112,38 @@ claimant's own unverified/invalid links → verdict `no_breach`, 95%
 confidence, explicitly citing the verified evidence as contradicting the
 claimant's claim → finalized as `CASE_1`.
 
+## Reproduce the demo flow
+
+Use two Studionet accounts, one as the agreement creator and one as the
+counterparty.
+
+1. Start the frontend with `npm run dev --prefix app`.
+2. Connect the creator wallet and open `/agreements/new`.
+3. Create an agreement with a concrete deliverable, a counterparty address,
+   an agreement type such as `bounty` or `freelance`, and `public_precedent`
+   as the precedent policy.
+4. Switch to the counterparty wallet and open the created agreement page.
+5. Accept the agreement. Expected agreement status: `active`.
+6. As either party, file a dispute with at least one stable `https://` evidence
+   URL. Prefer a commit-pinned raw GitHub URL or another static page so every
+   validator fetches identical bytes.
+7. Open `/disputes/[id]`. Expected dispute status: `awaiting_response`.
+8. Switch to the respondent wallet and submit a response with any
+   counter-evidence URLs. Expected dispute status: `awaiting_precedent_search`.
+9. In each evidence rail, verify at least one evidence item. Expected evidence
+   status for a good static URL: `verified`, with HTTP status and content hash
+   visible in the UI.
+10. Request precedent search. Expected dispute status: `awaiting_verdict`.
+11. Request verdict. The button is disabled until at least one evidence item is
+    verified. Expected dispute status after consensus: `verdict_reached`.
+12. Finalize precedent. Expected dispute status: `finalized`; expected
+    agreement status: `resolved`; expected result: a new `CASE_n` visible in
+    `/cases` and the case detail page.
+
+If evidence verification returns `unstable`, retry with a more stable source.
+Dynamic pages, redirects, or pages that personalize responses can produce
+different bytes for different validators.
+
 ## Frontend
 
 - Next.js 16 App Router app in [app/](app/)

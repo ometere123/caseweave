@@ -21,6 +21,28 @@ reasons about which old cases are similar or distinguishable, and renders a
 verdict with a reusable holding. That verdict is what future disputes are
 judged against.
 
+## Why this needs GenLayer
+
+CaseWeave is not an AI advice app with a blockchain attached. The contract is
+asked to resolve adversarial disputes where parties may disagree about what an
+agreement required, whether evidence proves performance or breach, and how old
+cases should affect the current outcome. That work needs validator consensus
+because the result changes shared state: agreement status, dispute status,
+precedent memory, and the treatment graph for future cases.
+
+The contract does not simply check whether an LLM returned valid JSON. It
+checks the disputed outcome itself: validators must independently fetch
+evidence, agree on objective fetch data like HTTP status and content hash, and
+then reach comparative consensus on verdict category, precedent alignment,
+case IDs followed or distinguished, and confidence band before state changes.
+Free-form wording can vary; the legally meaningful outcome cannot.
+
+This is also why CaseWeave avoids judging claims from user-submitted text
+alone. User-provided links are weak references until the contract verifies
+them through GenLayer web fetching. A verdict cannot be requested until at
+least one evidence item has been fetched, hashed, summarized, and marked
+`verified`.
+
 - **Case memory, not case-by-case rulings** - every finalized verdict becomes
   a `PrecedentCase`: a fact pattern, a legal issue, a holding, and a reasoning
   rule, plus how it treated the cases before it
@@ -186,6 +208,8 @@ inside the contract before being written to state.
 See [DEPLOYMENT.md](DEPLOYMENT.md) for redeploy instructions and the local
 test accounts used to run the reference dispute end-to-end.
 
+For the iteration record, see [PROJECT_HISTORY.md](PROJECT_HISTORY.md).
+
 ## Tech stack
 
 | Layer                | Tech                                                                 |
@@ -237,6 +261,12 @@ genlayer deploy --contract contracts/caseweave.py
 
 Then update `CASEWEAVE_CONTRACT_ADDRESS` in
 [app/lib/contract.ts](app/lib/contract.ts).
+
+Run the lightweight contract guardrail tests:
+
+```bash
+python -m unittest discover
+```
 
 ## Disclaimer
 

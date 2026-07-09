@@ -19,7 +19,7 @@ type WalletState = {
 
 export const useWallet = create<WalletState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       address: null,
       connecting: false,
       hydrated: false,

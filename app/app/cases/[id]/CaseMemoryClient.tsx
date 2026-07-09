@@ -9,12 +9,14 @@ import { TreatmentBadge } from "../../../components/TreatmentBadge";
 import { HoldingPanel } from "../../../components/HoldingPanel";
 import { CitationGraph } from "../../../components/CitationGraph";
 
+type PrecedentGraph = {
+  outgoing_treatments: CaseTreatment[];
+  incoming_treatments: CaseTreatment[];
+};
+
 export function CaseMemoryClient({ caseId }: { caseId: string }) {
   const [precedentCase, setPrecedentCase] = useState<PrecedentCase | null>(null);
-  const [graph, setGraph] = useState<{
-    outgoing_treatments: CaseTreatment[];
-    incoming_treatments: CaseTreatment[];
-  } | null>(null);
+  const [graph, setGraph] = useState<PrecedentGraph | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export function CaseMemoryClient({ caseId }: { caseId: string }) {
     ])
       .then(([c, g]) => {
         setPrecedentCase(c as PrecedentCase);
-        setGraph(g as any);
+        setGraph(g as PrecedentGraph);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load case"));
   }, [caseId]);
