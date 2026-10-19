@@ -12,7 +12,12 @@ import hashlib
 import json
 
 
-EVIDENCE_URL = "https://evidence.example/caseweave-readme"
+EVIDENCE_COMMIT = "ff4df65945c068d0d3690aea8f2b256abcbbd290"
+EVIDENCE_URL = (
+    "https://raw.githubusercontent.com/ometere123/caseweave/"
+    + EVIDENCE_COMMIT
+    + "/README.md"
+)
 EVIDENCE_BODY = (
     b"The CaseWeave agreement requires the respondent to deliver the agreed work."
 )
@@ -51,6 +56,26 @@ VERDICT_RESULT = "```json\n" + json.dumps(
         "fact_pattern_summary": "The respondent did not deliver the agreed work.",
         "reasoning_rule": "Verified evidence controls when it directly supports the claim.",
         "tags": ["delivery", "verified-evidence"],
+    }
+) + "\n```"
+
+APPEAL_RESULT = "```json\n" + json.dumps(
+    {
+        "appeal_id": "APP_1",
+        "dispute_id": "DIS_1",
+        "case_id": "CASE_1",
+        "snapshot_id": "SNAPSHOT_DIS_1_1",
+        "result": "overturned_precedent",
+        "affected_case_id": "CASE_1",
+        "remedy_outcome": "refund",
+        "reasoning": "The appellate validators found the original precedent treatment unsupported by the frozen evidence.",
+        "findings": [
+            {
+                "obligation": "delivery",
+                "finding": "unsatisfied",
+                "source": EVIDENCE_URL,
+            }
+        ],
     }
 ) + "\n```"
 
@@ -97,10 +122,10 @@ def _create_pending_appeal(court, direct_vm, owner, alice, bob) -> tuple[str, st
     assert court.get_dispute(dispute_id)["status"] == "awaiting_precedent_search"
 
     direct_vm.mock_web(
-        r"evidence\.example/caseweave-readme",
+        r"raw\.githubusercontent\.com/ometere123/caseweave/" + EVIDENCE_COMMIT,
         {"status": 200, "body": EVIDENCE_BODY},
     )
-    direct_vm.mock_llm(r"Extract only facts from the fetched content", VERIFIED_EVIDENCE)
+    direct_vm.mock_llm(r"verifying evidence for a CaseWeave dispute", VERIFIED_EVIDENCE)
     direct_vm.sender = alice
     evidence = court.verify_evidence_url(dispute_id, "claimant", 0)
     assert evidence["status"] == "verified"
@@ -124,12 +149,14 @@ def _create_pending_appeal(court, direct_vm, owner, alice, bob) -> tuple[str, st
     assert case["status"] == "active"
     assert court.get_dispute(dispute_id)["status"] == "finalized"
 
+    direct_vm.value = 1
     appeal_id = court.file_appeal(
         dispute_id,
         "precedent_misapplied",
         "Reconsider the application of the holding.",
         1,
     )
+    direct_vm.value = 0
     assert court.get_appeal(appeal_id)["status"] == "under_review"
     assert court.get_dispute(dispute_id)["status"] == "under_appeal"
 
@@ -169,21 +196,25 @@ def test_full_lifecycle_and_owner_authorization(
 
     before = _state(court, appeal_id, dispute_id, case_id)
 
-    # Neither an unrelated wallet nor either dispute party may resolve an appeal.
-    for actor in (charlie, alice, bob):
+    # Merits are no longer owner-discretionary. No wallet can use the old
+    # compatibility method to choose an outcome, and failed calls preserve state.
+    for actor in (charlie, alice, bob, owner):
         direct_vm.sender = actor
-        with direct_vm.expect_revert("only the owner may resolve appeals"):
+        expected_error = (
+            "cannot resolve merits appeals"
+            if actor == owner
+            else "only the owner may access the administrative appeal guard"
+        )
+        with direct_vm.expect_revert(expected_error):
             court.resolve_appeal(appeal_id, "overturned_precedent")
         assert _state(court, appeal_id, dispute_id, case_id) == before
 
-    # The owner cannot accept an invalid result, and validation precedes writes.
+    # Only the validator-consensus appellate path may create a decision. The
+    # owner can submit the request, but cannot select its merits result.
+    direct_vm.mock_llm(r"independent appellate validator", APPEAL_RESULT)
     direct_vm.sender = owner
-    with direct_vm.expect_revert("invalid appeal result"):
-        court.resolve_appeal(appeal_id, "not-a-real-result")
-    assert _state(court, appeal_id, dispute_id, case_id) == before
-
-    # A valid owner resolution updates only the appeal's finalized precedent.
-    court.resolve_appeal(appeal_id, "overturned_precedent")
+    decision = court.request_appeal_review(appeal_id)
+    assert decision["result"] == "overturned_precedent"
     after = _state(court, appeal_id, dispute_id, case_id)
     assert after["appeal"]["status"] == "resolved"
     assert after["appeal"]["result"] == "overturned_precedent"
@@ -191,9 +222,23 @@ def test_full_lifecycle_and_owner_authorization(
     assert after["case"]["case_id"] == case_id
     assert after["case"]["status"] == "overturned"
 
-    # A completed appeal cannot be resolved twice.
+    # The bonded appeal is a real accounted liability.  A resolved appeal may
+    # return it only to the appellant, and only after a tracked child transfer
+    # is confirmed by the recipient.
+    direct_vm.sender = alice
+    bond_transfer_id = court.release_appeal_bond(appeal_id)
+    assert court.get_transfer(bond_transfer_id)["purpose"] == "appeal_bond_return"
+    with direct_vm.expect_revert("only the intended recipient"):
+        direct_vm.sender = bob
+        court.confirm_transfer(bond_transfer_id, "0x" + "2" * 64)
+    direct_vm.sender = alice
+    returned_bond = court.confirm_transfer(bond_transfer_id, "0x" + "2" * 64)
+    assert returned_bond["status"] == "delivered"
+    assert court.get_appeal(appeal_id)["bond_status"] == "returned"
+
+    # A completed appeal cannot be resolved twice or reviewed again.
     with direct_vm.expect_revert("appeal already resolved"):
-        court.resolve_appeal(appeal_id, "affirmed")
+        court.request_appeal_review(appeal_id)
 
     # The agreement -> dispute -> evidence -> verdict -> precedent transitions
     # above also prove that the typed counterparty remains stored as an address.

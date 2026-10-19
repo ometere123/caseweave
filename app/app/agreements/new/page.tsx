@@ -13,7 +13,7 @@ import { useWallet } from "../../../store/useWallet";
 import {
   ALLOWED_AGREEMENT_TYPES,
   ALLOWED_PRECEDENT_POLICIES,
-  buildCreateAgreementArgs,
+  buildCreateTechnicalAgreementArgs,
   type Agreement,
 } from "../../../lib/contract";
 
@@ -23,6 +23,14 @@ export default function CreateAgreementPage() {
 
   const [title, setTitle] = useState("");
   const [agreementText, setAgreementText] = useState("");
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState("");
+  const [obligationText, setObligationText] = useState("");
+  const [deliverableDescription, setDeliverableDescription] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [milestoneAmount, setMilestoneAmount] = useState("100");
+  const [repositoryUrl, setRepositoryUrl] = useState("");
+  const [sourcePolicy] = useState("github_commit_pinned");
+  const [completionConditions, setCompletionConditions] = useState("");
   const [counterparty, setCounterparty] = useState("");
   const [agreementType, setAgreementType] = useState<string>(
     ALLOWED_AGREEMENT_TYPES[0]
@@ -46,6 +54,18 @@ export default function CreateAgreementPage() {
       return;
     }
 
+    if (!repositoryUrl.trim() || !acceptanceCriteria.trim() || !obligationText.trim()) {
+      setError("Repository, acceptance criteria, and at least one obligation are required.");
+      return;
+    }
+
+    const displayedAmount = Number(stakeAmount) || 0;
+    const fundedMilestoneAmount = Number(milestoneAmount);
+    if (!Number.isSafeInteger(fundedMilestoneAmount) || fundedMilestoneAmount < 0) {
+      setError("Milestone amount must be a non-negative whole number of GEN.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const tagList = tags
@@ -53,19 +73,34 @@ export default function CreateAgreementPage() {
         .map((t) => t.trim())
         .filter(Boolean);
 
-      const args = buildCreateAgreementArgs({
+      const args = buildCreateTechnicalAgreementArgs({
         creator: address,
         title,
         agreementText,
         counterparty,
         agreementType,
         tags: tagList,
-        stakeAmount: Number(stakeAmount) || 0,
+        stakeAmount: displayedAmount,
         precedentPolicy,
+        acceptanceCriteria,
+        obligations: [{ id: "delivery", text: obligationText }],
+        deliverables: [{ id: "primary", description: deliverableDescription }],
+        milestones: [
+          {
+            name: "Primary delivery",
+            obligation_id: "delivery",
+            acceptance_criteria: acceptanceCriteria,
+            deadline: deadline ? new Date(deadline).toISOString() : "2099-01-01T00:00:00Z",
+            amount: fundedMilestoneAmount,
+          },
+        ],
+        repositoryUrl: repositoryUrl.trim(),
+        sourcePolicy,
+        completionConditions: completionConditions.trim() || acceptanceCriteria,
       });
       const { hash, receipt } = await writeContract(
         address,
-        "create_agreement",
+        "create_technical_agreement",
         args,
       );
 
@@ -79,7 +114,7 @@ export default function CreateAgreementPage() {
           agreementText,
           agreementType,
           tags: tagList,
-          stakeAmount: Number(stakeAmount) || 0,
+          stakeAmount: displayedAmount,
           precedentPolicy,
         },
         readAgreement: async (agreementId) =>
@@ -156,7 +191,88 @@ export default function CreateAgreementPage() {
           />
         </Field>
 
-        <Field label="Stake amount (GEN)">
+        <div className="border border-line/40 rounded-sm p-4 space-y-4">
+          <p className="font-mono text-[11px] uppercase tracking-wide text-gold">
+            Proof-of-performance commitment
+          </p>
+          <p className="text-xs text-muted leading-relaxed">
+            These fields are committed on-chain before acceptance. The source
+            repository is later checked against an immutable commit-pinned
+            evidence URL; a green CI result is supporting context, not proof by itself.
+          </p>
+          <Field label="Acceptance criteria">
+            <textarea
+              required
+              rows={3}
+              value={acceptanceCriteria}
+              onChange={(e) => setAcceptanceCriteria(e.target.value)}
+              className="input"
+              placeholder="The named commit must contain the agreed deliverable and satisfy the measurable obligation."
+            />
+          </Field>
+          <Field label="Primary obligation">
+            <textarea
+              required
+              rows={2}
+              value={obligationText}
+              onChange={(e) => setObligationText(e.target.value)}
+              className="input"
+              placeholder="Deliver the authenticated repository change described by this agreement."
+            />
+          </Field>
+          <Field label="Deliverable description">
+            <textarea
+              rows={2}
+              value={deliverableDescription}
+              onChange={(e) => setDeliverableDescription(e.target.value)}
+              className="input"
+              placeholder="A reviewable source revision, pull request, CI record, and deployment artifact."
+            />
+          </Field>
+          <div className="grid md:grid-cols-2 gap-4">
+            <Field label="Deadline">
+              <input
+                required
+                type="datetime-local"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="input"
+              />
+            </Field>
+            <Field label="Milestone allocation (GEN)">
+              <input
+                required
+                type="number"
+                min={0}
+                step={1}
+                value={milestoneAmount}
+                onChange={(e) => setMilestoneAmount(e.target.value)}
+                className="input"
+              />
+            </Field>
+          </div>
+          <Field label="GitHub repository URL">
+            <input
+              required
+              type="url"
+              value={repositoryUrl}
+              onChange={(e) => setRepositoryUrl(e.target.value)}
+              className="input font-mono"
+              placeholder="https://github.com/owner/repository"
+            />
+          </Field>
+          <Field label="Completion conditions">
+            <textarea
+              rows={2}
+              value={completionConditions}
+              onChange={(e) => setCompletionConditions(e.target.value)}
+              className="input"
+              placeholder="What must be true before the milestone can be accepted?"
+            />
+          </Field>
+        </div>
+
+        <Field label="Displayed contractual amount (GEN)">
           <input
             type="number"
             min={0}

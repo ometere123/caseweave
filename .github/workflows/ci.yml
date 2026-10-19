@@ -1,0 +1,37 @@
+name: CaseWeave gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      GENVM_VERSION: v0.2.16
+      PYTHONUTF8: "1"
+      PLAYWRIGHT_START_SERVER: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r requirements.txt genvm-linter==0.11.0
+      - run: npm ci
+      - run: npm ci --prefix app
+      - run: python -m unittest discover -v
+      - run: gltest.exe test/test_caseweave_direct.py test/test_caseweave_milestone_direct.py -v -s
+      - run: genvm-lint check contracts/caseweave.py --json
+      - run: genvm-lint check contracts/caseweave_judgment_consumer.py --json
+      - run: npm run test:frontend
+      - run: npm run build --prefix app
+      - run: npm run lint --prefix app -- app components lib store
+      - run: ./app/node_modules/.bin/tsc --noEmit -p app/tsconfig.json
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:playwright -- --project="Desktop Chrome"

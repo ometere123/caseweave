@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { abi as appSdkAbi } from "../../app/node_modules/genlayer-js/dist/index.js";
 import { CalldataAddress } from "../../app/node_modules/genlayer-js/dist/types/index.js";
 import { toCalldataAddress, assertDistinctCounterparty } from "../../app/lib/address";
-import { buildCreateAgreementArgs } from "../../app/lib/contract";
+import {
+  buildCreateAgreementArgs,
+  buildCreateTechnicalAgreementArgs,
+  buildFundAgreementArgs,
+} from "../../app/lib/contract";
 import {
   assertExecutionSucceeded,
   extractTransactionReturnString,
@@ -90,6 +94,40 @@ describe("GenLayer address calldata", () => {
     });
 
     expect(args[2]).toBeInstanceOf(CalldataAddress);
+  });
+
+  it("uses the typed address in the structured technical agreement path", () => {
+    const args = buildCreateTechnicalAgreementArgs({
+      creator: CREATOR,
+      title: "Technical agreement",
+      agreementText: "The repository change must be delivered.",
+      counterparty: COUNTERPARTY,
+      agreementType: "agent_service",
+      tags: ["github"],
+      stakeAmount: 100,
+      precedentPolicy: "public_precedent",
+      acceptanceCriteria: "The immutable commit contains the deliverable.",
+      obligations: [{ id: "delivery", text: "Deliver the commit." }],
+      deliverables: [{ id: "source", description: "Reviewable source revision." }],
+      milestones: [{
+        name: "Delivery",
+        obligation_id: "delivery",
+        acceptance_criteria: "The commit is present.",
+        deadline: "2030-01-01T00:00:00Z",
+        amount: 100,
+      }],
+      repositoryUrl: "https://github.com/ometere123/caseweave",
+      sourcePolicy: "github_commit_pinned",
+      completionConditions: "Validators authenticate the pinned source.",
+    });
+
+    expect(args[2]).toBeInstanceOf(CalldataAddress);
+    expect(JSON.parse(args[8] as string)[0].id).toBe("delivery");
+    expect(JSON.parse(args[10] as string)[0].amount).toBe(100);
+  });
+
+  it("builds payable funding arguments without changing the typed address path", () => {
+    expect(buildFundAgreementArgs("AGR_1", 1000)).toEqual(["AGR_1", 1000]);
   });
 });
 

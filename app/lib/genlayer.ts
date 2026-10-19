@@ -4,6 +4,7 @@ import type {
   Address,
   CalldataEncodable,
   GenLayerTransaction,
+  Hash,
 } from "genlayer-js/types";
 import { CASEWEAVE_CONTRACT_ADDRESS } from "./contract";
 
@@ -41,7 +42,10 @@ export function getExplorerTxUrl(hash: string): string {
 
 /** Return the SDK 1.1.8 execution error, or null for a successful result. */
 export function getExecutionError(receipt: ReceiptLike): string | null {
-  const leaderReceipt = receipt.consensus_data?.leader_receipt?.[0];
+  const leaderReceipt =
+    receipt.consensus_data?.leader_receipt?.find(
+      (item) => (item as LeaderReceiptLike & { mode?: string }).mode === "leader",
+    ) ?? receipt.consensus_data?.leader_receipt?.[0];
   const executionResultName = receipt.txExecutionResultName;
 
   if (executionResultName === "FINISHED_WITH_ERROR" || receipt.txExecutionResult === 2) {
@@ -225,14 +229,15 @@ export async function readContract(
 export async function writeContract(
   account: Address,
   functionName: string,
-  args: CalldataEncodable[] = []
+  args: CalldataEncodable[] = [],
+  value: bigint = BigInt(0),
 ) {
   const client = getWriteClient(account);
   const hash = await client.writeContract({
     address: CASEWEAVE_CONTRACT_ADDRESS,
     functionName,
     args,
-    value: BigInt(0),
+    value,
   });
   const waitedReceipt = await client.waitForTransactionReceipt({
     hash,
@@ -244,4 +249,10 @@ export async function writeContract(
   const receipt = mergeReceipts(waitedReceipt, fullReceipt);
   assertExecutionSucceeded(hash, receipt);
   return { hash, receipt };
+}
+
+/** Child transactions are created only after a finalized parent message. */
+export async function getTriggeredTransactionIds(hash: string): Promise<string[]> {
+  const client = getReadClient();
+  return (await client.getTriggeredTransactionIds({ hash: hash as Hash })) as string[];
 }

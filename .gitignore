@@ -13,3 +13,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+__pycache__/
+test-results/
+app/test-results/
+test-evidence/playwright.json

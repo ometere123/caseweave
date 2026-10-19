@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { readContract, writeContract } from "../../../lib/genlayer";
+import { getExplorerTxUrl, readContract, writeContract } from "../../../lib/genlayer";
 import { useWallet } from "../../../store/useWallet";
-import type { Dispute, EvidenceItem } from "../../../lib/contract";
+import type { Appeal, Dispute, EvidenceItem, Judgment } from "../../../lib/contract";
 import type { CalldataEncodable } from "genlayer-js/types";
 import { EvidenceRail } from "../../../components/EvidenceRail";
 import { PrecedentBench } from "../../../components/PrecedentBench";
@@ -15,17 +15,28 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
   const { address, connect } = useWallet();
   const [dispute, setDispute] = useState<Dispute | null>(null);
   const [evidence, setEvidence] = useState<EvidenceState>({ claimant: [], respondent: [] });
+  const [judgment, setJudgment] = useState<Judgment | null>(null);
+  const [appeals, setAppeals] = useState<Record<string, Appeal>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [lastTransaction, setLastTransaction] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [d, ev] = await Promise.all([
+      const [d, ev, currentJudgment, allAppeals] = await Promise.all([
         readContract("get_dispute", [disputeId]),
         readContract("list_evidence_for_dispute", [disputeId]),
+        readContract("get_current_judgment", [disputeId]),
+        readContract("list_appeals"),
       ]);
       setDispute(d as Dispute);
       setEvidence(ev as EvidenceState);
+      setJudgment((currentJudgment as Judgment | null) || null);
+      setAppeals(
+        Object.fromEntries(
+          Object.entries(allAppeals as Record<string, Appeal>).filter(([, item]) => item.dispute_id === disputeId),
+        ),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load dispute");
     }
@@ -42,7 +53,23 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
     setBusy(action);
     setError(null);
     try {
-      await writeContract(address, action, args);
+      const result = await writeContract(address, action, args);
+      setLastTransaction(result.hash);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to run ${action}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function runPayableAction(action: string, args: CalldataEncodable[], value: bigint) {
+    if (!address) return connect();
+    setBusy(action);
+    setError(null);
+    try {
+      const result = await writeContract(address, action, args, value);
+      setLastTransaction(result.hash);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to run ${action}`);
@@ -101,6 +128,16 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
             canAdd={canEditEvidence && isClaimant}
             onChanged={load}
           />
+          {canEditEvidence && isParty && evidence.claimant.length > 0 && (
+            <ChallengeForm
+              disputeId={disputeId}
+              side="claimant"
+              onSubmit={(index, category, claim, counterUrl) =>
+                runAction("challenge_evidence", [disputeId, "claimant", index, category, claim, counterUrl])
+              }
+              busy={busy === "challenge_evidence"}
+            />
+          )}
           {dispute.verdict && (
             <p className="font-mono text-xs text-muted">
               score after verdict: {dispute.verdict.claimant_score}
@@ -202,13 +239,72 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
           </button>
         )}
 
-        {dispute.status === "finalized" && dispute.final_case_id && (
+      {dispute.status === "finalized" && dispute.final_case_id && (
           <p className="mt-6 font-mono text-sm text-verdict">
             Case memory created: {dispute.final_case_id}.{" "}
             <a href={`/cases/${dispute.final_case_id}`} className="underline">
               View case
             </a>
           </p>
+        )}
+
+        {judgment && (
+          <div className="mt-6 border border-citation/40 rounded-sm p-4 bg-citation/5">
+            <SectionLabel>Canonical judgment</SectionLabel>
+            <div className="grid md:grid-cols-3 gap-3 mt-3 text-xs font-mono">
+              <div><span className="text-muted block">judgment</span><span className="text-paper">{judgment.judgment_id}</span></div>
+              <div><span className="text-muted block">version / status</span><span className="text-paper">v{judgment.version} · {judgment.status}</span></div>
+              <div><span className="text-muted block">appeal</span><span className="text-paper">{judgment.appeal_status}</span></div>
+            </div>
+            <p className="text-[11px] text-muted mt-3">Frozen evidence snapshot commitment</p>
+            <p className="font-mono text-[10px] text-paper break-all">{judgment.evidence_snapshot_hash}</p>
+            <p className="text-xs text-parchment/90 mt-3">Interpretation is shown separately from this source-verification commitment. A superseded judgment cannot be consumed by another contract.</p>
+          </div>
+        )}
+
+        {Object.values(appeals).map((appeal) => (
+          <div key={appeal.appeal_id} className="mt-4 border border-gold/40 rounded-sm p-4">
+            <SectionLabel>Appellate record · {appeal.appeal_id}</SectionLabel>
+            <p className="text-xs text-paper mt-2">{appeal.appeal_ground.replace(/_/g, " ")} · {appeal.status}</p>
+            <p className="text-xs text-muted mt-1">{appeal.requested_change}</p>
+            {appeal.result && <p className="font-mono text-xs text-verdict mt-2">Consensus result: {appeal.result.replace(/_/g, " ")}</p>}
+            {appeal.status === "under_review" && (
+              <button
+                onClick={() => runAction("request_appeal_review", [appeal.appeal_id])}
+                disabled={busy === "request_appeal_review"}
+                className="mt-3 bg-gold text-ink font-mono text-xs px-4 py-2 rounded-sm disabled:opacity-50"
+              >
+                {busy === "request_appeal_review" ? "Appellate validators deliberating…" : "Request independent appellate review"}
+              </button>
+            )}
+          </div>
+        ))}
+
+        {dispute.status === "finalized" && isParty && (
+          <AppealForm
+            onSubmit={(ground, requestedChange, bond) =>
+              runPayableAction(
+                "file_appeal",
+                [disputeId, ground, requestedChange, bond],
+                BigInt(bond),
+              )
+            }
+            busy={busy === "file_appeal"}
+          />
+        )}
+
+        {dispute.status === "finalized" && judgment?.status === "finalized" && (
+          <button
+            onClick={() => runAction("settle_judgment", [disputeId])}
+            disabled={busy === "settle_judgment"}
+            className="mt-4 border border-verdict/70 text-verdict font-mono text-xs px-4 py-2 rounded-sm disabled:opacity-50"
+          >
+            {busy === "settle_judgment" ? "Reconciling settlement…" : "Execute funded settlement"}
+          </button>
+        )}
+
+        {lastTransaction && (
+          <p className="mt-4 text-[11px] text-muted">Finalized transaction: <a className="text-citation underline" href={getExplorerTxUrl(lastTransaction)} target="_blank" rel="noreferrer">{lastTransaction.slice(0, 14)}…</a></p>
         )}
       </div>
     </div>
@@ -261,6 +357,65 @@ function ResponseForm({
       >
         {busy ? "Submitting…" : "Submit Response"}
       </button>
+    </div>
+  );
+}
+
+function ChallengeForm({
+  side,
+  onSubmit,
+  busy,
+}: {
+  disputeId: string;
+  side: "claimant" | "respondent";
+  onSubmit: (index: number, category: string, claim: string, counterUrl: string) => void;
+  busy: boolean;
+}) {
+  const [index, setIndex] = useState("0");
+  const [category, setCategory] = useState("authenticity");
+  const [claim, setClaim] = useState("");
+  const [counterUrl, setCounterUrl] = useState("");
+
+  return (
+    <div className="border border-gold/30 rounded-sm p-3 mt-3 space-y-2">
+      <p className="font-mono text-[10px] uppercase tracking-wide text-gold">Challenge {side} evidence</p>
+      <div className="grid grid-cols-2 gap-2">
+        <input aria-label="Evidence index" type="number" min={0} value={index} onChange={(e) => setIndex(e.target.value)} className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper" />
+        <select aria-label="Challenge category" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper">
+          {["authenticity", "relevance", "incomplete", "misleading", "contradicted"].map((value) => <option key={value}>{value}</option>)}
+        </select>
+      </div>
+      <textarea aria-label="Challenge claim" required rows={2} value={claim} onChange={(e) => setClaim(e.target.value)} placeholder="Identify the specific authenticity, relevance, or completeness concern." className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper" />
+      <input aria-label="Counter evidence URL" value={counterUrl} onChange={(e) => setCounterUrl(e.target.value)} placeholder="Optional allowlisted counter-evidence URL" className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper font-mono" />
+      <button onClick={() => onSubmit(Number(index), category, claim, counterUrl)} disabled={busy || claim.trim().length < 10} className="border border-gold/60 text-gold font-mono text-xs px-3 py-1.5 rounded-sm disabled:opacity-50">{busy ? "Submitting…" : "Record challenge"}</button>
+    </div>
+  );
+}
+
+function AppealForm({
+  onSubmit,
+  busy,
+}: {
+  onSubmit: (ground: string, requestedChange: string, bond: number) => void;
+  busy: boolean;
+}) {
+  const [ground, setGround] = useState("precedent_misapplied");
+  const [requestedChange, setRequestedChange] = useState("");
+  const [bond, setBond] = useState("1");
+
+  return (
+    <div className="mt-6 border border-gold/40 rounded-sm p-4 space-y-3">
+      <SectionLabel>File an appeal</SectionLabel>
+      <p className="text-xs text-muted">Appeals hold a real GEN bond and are decided by independent appellate consensus. The former owner-only merits write is disabled.</p>
+      <select aria-label="Appeal ground" value={ground} onChange={(e) => setGround(e.target.value)} className="w-full bg-ink border border-line/50 rounded-sm px-3 py-2 text-xs text-paper">
+        {["precedent_misapplied", "key_evidence_ignored", "new_evidence", "wrong_agreement_interpretation", "bad_faith_evidence", "outcome_inconsistent_with_holding"].map((value) => <option key={value}>{value}</option>)}
+      </select>
+      <textarea aria-label="Requested appellate change" required rows={3} value={requestedChange} onChange={(e) => setRequestedChange(e.target.value)} placeholder="State the precise ground and requested change." className="w-full bg-ink border border-line/50 rounded-sm px-3 py-2 text-sm text-paper" />
+      <div className="flex gap-2 items-center">
+        <label className="text-xs text-muted" htmlFor="appeal-bond">Bond (GEN)</label>
+        <input id="appeal-bond" aria-label="Appeal bond in GEN" type="number" min={1} step={1} value={bond} onChange={(e) => setBond(e.target.value)} className="w-28 bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper" />
+        <button onClick={() => onSubmit(ground, requestedChange, Number(bond))} disabled={busy || requestedChange.trim().length < 10} className="bg-gold text-ink font-mono text-xs px-3 py-2 rounded-sm disabled:opacity-50">{busy ? "Filing…" : "File appeal"}</button>
+      </div>
     </div>
   );
 }

@@ -3,9 +3,11 @@
   "type": "module",
   "scripts": {
     "test:frontend": "vitest run test/frontend/caseweave.test.ts",
-    "test:studionet": "vitest run test/frontend/studionet_e2e.test.ts"
+    "test:studionet": "vitest run test/frontend/studionet_e2e.test.ts",
+    "test:playwright": "playwright test -c playwright.config.ts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "genlayer": "0.39.1",
     "genlayer-js": "1.1.8",
     "vitest": "3.2.7"

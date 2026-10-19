@@ -5,6 +5,9 @@ export const CASEWEAVE_CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS ??
     "0x99be950790dEec2F474e5F6E55845eF75D8872a0") as `0x${string}`;
 
+export const CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS =
+  (process.env.NEXT_PUBLIC_CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS ?? "") as `0x${string}` | "";
+
 export const EVIDENCE_STATUSES = [
   "unverified",
   "verified",
@@ -72,6 +75,22 @@ export type CreateAgreementInput = {
   precedentPolicy: string;
 };
 
+export type CreateTechnicalAgreementInput = CreateAgreementInput & {
+  acceptanceCriteria: string;
+  obligations: Array<{ id: string; text: string }>;
+  deliverables: Array<{ id: string; description: string }>;
+  milestones: Array<{
+    name: string;
+    obligation_id: string;
+    acceptance_criteria: string;
+    deadline: string;
+    amount: number;
+  }>;
+  repositoryUrl: string;
+  sourcePolicy: string;
+  completionConditions: string;
+};
+
 /** Build the exact calldata argument list used by the creation form. */
 export function buildCreateAgreementArgs(
   input: CreateAgreementInput,
@@ -84,6 +103,68 @@ export function buildCreateAgreementArgs(
     input.tags,
     input.stakeAmount,
     input.precedentPolicy,
+  ];
+}
+
+/** Build the structured technical-agreement call used by the courtroom form. */
+export function buildCreateTechnicalAgreementArgs(
+  input: CreateTechnicalAgreementInput,
+): CalldataEncodable[] {
+  return [
+    input.title,
+    input.agreementText,
+    assertDistinctCounterparty(input.counterparty, input.creator),
+    input.agreementType,
+    input.tags,
+    input.stakeAmount,
+    input.precedentPolicy,
+    input.acceptanceCriteria,
+    JSON.stringify(input.obligations),
+    JSON.stringify(input.deliverables),
+    JSON.stringify(input.milestones),
+    input.repositoryUrl,
+    input.sourcePolicy,
+    input.completionConditions,
+  ];
+}
+
+export function buildFundAgreementArgs(
+  agreementId: string,
+  amount: number,
+): CalldataEncodable[] {
+  return [agreementId, amount];
+}
+
+export function buildFundMilestoneArgs(
+  agreementId: string,
+  milestoneId: string,
+): CalldataEncodable[] {
+  return [agreementId, milestoneId];
+}
+
+export function buildRegisterDeliveryProofArgs(input: {
+  agreementId: string;
+  milestoneId: string;
+  repositoryUrl: string;
+  repositoryIdentity: string;
+  commitSha: string;
+  pullRequest: Record<string, unknown>;
+  changedFiles: string[];
+  ciResults: Record<string, unknown>;
+  deploymentArtifacts: string[];
+  evidenceUrl: string;
+}): CalldataEncodable[] {
+  return [
+    input.agreementId,
+    input.milestoneId,
+    input.repositoryUrl,
+    input.repositoryIdentity,
+    input.commitSha,
+    JSON.stringify(input.pullRequest),
+    JSON.stringify(input.changedFiles),
+    JSON.stringify(input.ciResults),
+    JSON.stringify(input.deploymentArtifacts),
+    input.evidenceUrl,
   ];
 }
 
@@ -100,6 +181,116 @@ export type Agreement = {
   tags: string[];
   created_at: string;
   updated_at: string;
+  commitment_hash?: string;
+  escrow?: EscrowAccount;
+};
+
+export type AgreementSpec = {
+  agreement_id: string;
+  acceptance_criteria: string;
+  obligations: Array<Record<string, unknown>>;
+  deliverables: Array<Record<string, unknown>>;
+  milestones: Array<Record<string, unknown>>;
+  repository_url: string;
+  repository_identity: string;
+  source_policy: string;
+  completion_conditions: string;
+  commitment_hash: string;
+  version: number;
+  amendment_status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Milestone = {
+  milestone_id: string;
+  agreement_id: string;
+  name: string;
+  obligation_id: string;
+  acceptance_criteria: string;
+  deadline: string;
+  amount: number;
+  funded_amount: number;
+  status: string;
+  deliverable_ref: string;
+  commitment_hash: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EscrowAccount = {
+  agreement_id: string;
+  actual_deposited: number;
+  available: number;
+  committed: number;
+  reserved: number;
+  pending_transfer: number;
+  settled: number;
+  appeal_bond_balance: number;
+  failed_transfer_balance: number;
+  last_transfer_nonce: number;
+  status: string;
+};
+
+export type DeliveryProof = {
+  proof_id: string;
+  agreement_id: string;
+  milestone_id: string;
+  submitted_by: string;
+  repository_url: string;
+  repository_identity: string;
+  commit_sha: string;
+  pull_request: Record<string, unknown>;
+  changed_files: string[];
+  ci_results: Record<string, unknown>;
+  deployment_artifacts: string[];
+  evidence_url: string;
+  source_adapter: string;
+  content_hash: string;
+  assessment?: {
+    overall_finding?: string;
+    obligations?: Array<Record<string, unknown>>;
+    summary?: string;
+  } | null;
+  status: string;
+  snapshot_id: string;
+  verified_at: string;
+  created_at: string;
+};
+
+export type TransferRecord = {
+  transfer_id: string;
+  agreement_id: string;
+  dispute_id: string;
+  judgment_id: string;
+  appeal_id: string;
+  recipient: string;
+  amount: number;
+  purpose: string;
+  status: string;
+  child_transaction_id: string;
+  created_at: string;
+  reconciled_at: string;
+};
+
+export type Judgment = {
+  judgment_id: string;
+  agreement_id: string;
+  dispute_id: string;
+  case_id: string;
+  evidence_snapshot_id: string;
+  evidence_snapshot_hash: string;
+  precedent_policy: string;
+  precedent_case_id: string;
+  outcome: string;
+  remedy: Record<string, unknown>;
+  appeal_status: string;
+  status: string;
+  version: number;
+  supersedes: string;
+  superseded_by: string;
+  reasoning: Record<string, unknown>;
+  created_at: string;
 };
 
 export type Dispute = {
@@ -202,4 +393,10 @@ export type Appeal = {
   result: string;
   filed_at: string;
   resolved_at: string;
+  snapshot_id?: string;
+  decision_version?: number;
+  decision?: Record<string, unknown> | null;
+  bond_status?: string;
+  supersedes_judgment_id?: string;
+  judgment_id?: string;
 };

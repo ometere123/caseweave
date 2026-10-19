@@ -1,11 +1,21 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { Wallet } from "ethers";
 import { expect, it } from "vitest";
-import { createAccount, createClient, chains } from "../../app/node_modules/genlayer-js/dist/index.js";
+import {
+  createAccount,
+  createClient,
+  chains,
+} from "../../app/node_modules/genlayer-js/dist/index.js";
 import { TransactionStatus } from "../../app/node_modules/genlayer-js/dist/types/index.js";
-import { buildCreateAgreementArgs } from "../../app/lib/contract";
+import {
+  buildCreateTechnicalAgreementArgs,
+  buildRegisterDeliveryProofArgs,
+} from "../../app/lib/contract";
+import { toCalldataAddress } from "../../app/lib/address";
 import {
   extractTransactionReturnString,
+  getExecutionError,
   getExplorerTxUrl,
   type ReceiptLike,
 } from "../../app/lib/genlayer";
@@ -14,8 +24,11 @@ import { resolveCreatedAgreementId } from "../../app/lib/create-agreement";
 const CONTRACT_ADDRESS =
   process.env.CASEWEAVE_E2E_CONTRACT_ADDRESS ??
   "0x99be950790dEec2F474e5F6E55845eF75D8872a0";
+const CONSUMER_ADDRESS = process.env.CASEWEAVE_E2E_CONSUMER_ADDRESS;
+const EVIDENCE_COMMIT = process.env.CASEWEAVE_E2E_COMMIT_SHA ?? "3916d4a";
 const EVIDENCE_URL =
-  "https://raw.githubusercontent.com/ometere123/caseweave/3916d4a/README.md";
+  process.env.CASEWEAVE_E2E_EVIDENCE_URL ??
+  `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/README.md`;
 
 type AccountName = "owner" | "party_a" | "party_b" | "third";
 
@@ -39,12 +52,13 @@ function loadAccount(name: AccountName) {
   return createAccount(privateKey);
 }
 
-async function readContract(client: any, functionName: string, args: any[] = []) {
-  return client.readContract({
-    address: CONTRACT_ADDRESS,
-    functionName,
-    args,
-  });
+function lastId(map: unknown, label: string): string {
+  if (!map || typeof map !== "object") {
+    throw new Error(`${label} did not return an object map`);
+  }
+  const ids = Object.keys(map as Record<string, unknown>).sort();
+  if (ids.length === 0) throw new Error(`${label} returned no records`);
+  return ids[ids.length - 1];
 }
 
 function leaderReceipt(receipt: any) {
@@ -55,73 +69,135 @@ function leaderReceipt(receipt: any) {
   );
 }
 
+function mergedReceipt(waited: any, full: any): ReceiptLike {
+  return {
+    ...waited,
+    ...(full ?? {}),
+    consensus_data: full?.consensus_data ?? waited?.consensus_data,
+  } as ReceiptLike;
+}
+
+async function readCase(client: any, functionName: string, args: any[] = []) {
+  return client.readContract({
+    address: CONTRACT_ADDRESS,
+    functionName,
+    args,
+  });
+}
+
+async function readConsumer(
+  client: any,
+  functionName: string,
+  args: any[] = [],
+) {
+  if (!CONSUMER_ADDRESS) {
+    throw new Error(
+      "CASEWEAVE_E2E_CONSUMER_ADDRESS is required for the cross-contract proof",
+    );
+  }
+  return client.readContract({
+    address: CONSUMER_ADDRESS,
+    functionName,
+    args,
+  });
+}
+
+async function triggered(client: any, hash: string): Promise<string[]> {
+  return (await client
+    .getTriggeredTransactionIds({ hash })
+    .catch(() => [])) as string[];
+}
+
 async function send(
   label: string,
   client: any,
   account: any,
+  address: string,
   functionName: string,
   args: any[],
   evidence: any[],
+  value: bigint = 0n,
   expectSuccess = true,
 ) {
   const hash = await client.writeContract({
     account,
-    address: CONTRACT_ADDRESS,
+    address,
     functionName,
     args,
-    value: 0n,
+    value,
   });
   const waited = await client.waitForTransactionReceipt({
     hash,
     status: TransactionStatus.FINALIZED,
-    retries: 120,
+    retries: 180,
     interval: 3000,
   });
-  const full = await client.getTransaction({ hash });
-  const receipt = (full ?? waited) as ReceiptLike;
+  const full = await client.getTransaction({ hash }).catch(() => null);
+  const receipt = mergedReceipt(waited, full);
   const leader = leaderReceipt(receipt);
   const executionResult = leader?.execution_result ?? "UNKNOWN";
-  const executionError =
-    leader?.error ??
-    leader?.genvm_result?.error_description ??
-    leader?.genvm_result?.raw_error ??
-    null;
+  const executionError = getExecutionError(receipt);
+  const childTransactionIds = await triggered(client, hash);
   const item = {
     label,
+    contract: address,
     method: functionName,
     hash,
     explorer: getExplorerTxUrl(hash),
-    consensusStatus: receipt.statusName ?? waited.statusName ?? receipt.status,
-    resultName: receipt.resultName ?? waited.resultName ?? receipt.result,
+    consensusStatus: receipt.statusName ?? receipt.status,
+    resultName: receipt.resultName ?? receipt.result,
     executionResult,
     executionResultName: receipt.txExecutionResultName,
-    consensusFinal: receipt.consensus_data?.final ?? null,
     executionError,
+    consensusFinal: receipt.consensus_data?.final ?? null,
     leaderResult: leader?.result ?? null,
+    triggeredTransactionIds: childTransactionIds,
   };
   evidence.push(item);
 
-  if (expectSuccess && executionResult !== "SUCCESS") {
+  if (expectSuccess && executionError) {
     throw new Error(
       `${label} finalized without successful GenVM execution: ${JSON.stringify(item)}`,
     );
   }
-  if (!expectSuccess && executionResult === "SUCCESS") {
+  if (!expectSuccess && !executionError) {
     throw new Error(`${label} unexpectedly succeeded: ${JSON.stringify(item)}`);
   }
 
-  return { hash, receipt, item };
+  return { hash, receipt, item, childTransactionIds };
+}
+
+async function waitForTriggered(
+  client: any,
+  parentHash: string,
+  attempts = 30,
+): Promise<string[]> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const ids = await triggered(client, parentHash);
+    if (ids.length > 0) return ids;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  return [];
 }
 
 it(
-  "completes the corrected CaseWeave workflow on StudioNet",
+  "completes the structured CaseWeave workflow on StudioNet",
   async () => {
     const evidence: any[] = [];
     const outputPath = process.env.CASEWEAVE_E2E_OUTPUT;
-    const writeOutput = (payload: any) => {
-      if (outputPath) {
-        writeFileSync(outputPath, `${JSON.stringify(payload, null, 2)}\n`);
-      }
+    const state: any = {
+      network: "studionet",
+      chainId: 61999,
+      rpc: "https://studio.genlayer.com/api",
+      contract: CONTRACT_ADDRESS,
+      consumer: CONSUMER_ADDRESS ?? null,
+      evidenceUrl: EVIDENCE_URL,
+      transactions: evidence,
+    };
+    const writeOutput = () => {
+      if (!outputPath) return;
+      mkdirSync(dirname(outputPath), { recursive: true });
+      writeFileSync(outputPath, `${JSON.stringify(state, null, 2)}\n`);
     };
 
     const owner = loadAccount("owner");
@@ -133,50 +209,60 @@ it(
     const partyBClient = createClient({ chain: chains.studionet, account: partyB });
     const thirdClient = createClient({ chain: chains.studionet, account: third });
 
-    const state: any = {
-      network: "studionet",
-      chainId: 61999,
-      rpc: "https://studio.genlayer.com/api",
-      contract: CONTRACT_ADDRESS,
-      accounts: {
-        owner: owner.address,
-        partyA: partyA.address,
-        partyB: partyB.address,
-        third: third.address,
-      },
-      evidenceUrl: EVIDENCE_URL,
-      transactions: evidence,
-    };
-
     try {
-      expect((await readContract(ownerClient, "get_owner")) as string).toBe(
-        owner.address,
-      );
+      expect((await readCase(ownerClient, "get_owner")) as string).toBe(owner.address);
 
-      const title = "CaseWeave reviewer remediation agreement";
-      const agreementText =
-        "The respondent must deliver the agreed work before the deadline.";
+      const commitSha = EVIDENCE_COMMIT;
+      const repositoryUrl = "https://github.com/ometere123/caseweave";
       const expectedAgreement = {
         creator: partyA.address,
         counterparty: partyB.address,
-        title,
-        agreementText,
-        agreementType: "bounty",
-        tags: ["reviewer", "remediation"],
-        stakeAmount: 0,
+        title: "CaseWeave verifiable software delivery",
+        agreementText:
+          "The developer must deliver a commit-pinned, repository-authenticated software artifact that satisfies the committed acceptance criteria.",
+        agreementType: "freelance",
+        tags: ["software", "proof-of-performance", "studionet"],
+        stakeAmount: 1000,
         precedentPolicy: "public_precedent",
+        acceptanceCriteria:
+          "The committed repository identity, immutable commit and delivery artifact must be independently verifiable; green CI alone is not sufficient.",
+        obligations: [
+          {
+            id: "obligation-1",
+            text: "Deliver a repository-authenticated software artifact at the committed source revision.",
+          },
+        ],
+        deliverables: [
+          {
+            id: "deliverable-1",
+            description: "Commit-pinned source artifact with provenance metadata.",
+          },
+        ],
+        milestones: [
+          {
+            name: "Authenticated delivery",
+            obligation_id: "obligation-1",
+            acceptance_criteria:
+              "The source identity and immutable commit must match the agreement.",
+            deadline: "2099-12-31T23:59:59Z",
+            amount: 900,
+          },
+        ],
+        repositoryUrl,
+        sourcePolicy:
+          "Allowlisted GitHub HTTPS sources with commit-pinned raw evidence and independent validator retrieval.",
+        completionConditions:
+          "A final judgment must settle or safely reconcile the committed milestone funds.",
       };
 
-      const agreementsBefore = await readContract(
-        partyAClient,
-        "list_agreements",
-      );
+      const agreementsBefore = await readCase(partyAClient, "list_agreements");
       const created = await send(
-        "create agreement through buildCreateAgreementArgs",
+        "create structured agreement through the frontend calldata builder",
         partyAClient,
         partyA,
-        "create_agreement",
-        buildCreateAgreementArgs(expectedAgreement),
+        CONTRACT_ADDRESS,
+        "create_technical_agreement",
+        buildCreateTechnicalAgreementArgs(expectedAgreement),
         evidence,
       );
       const agreementId = await resolveCreatedAgreementId({
@@ -184,281 +270,410 @@ it(
         receipt: created.receipt,
         expected: expectedAgreement,
         readAgreement: async (id) =>
-          (await readContract(partyAClient, "get_agreement", [id])) as any,
+          (await readCase(partyAClient, "get_agreement", [id])) as any,
         listAgreements: async () =>
-          (await readContract(partyAClient, "list_agreements")) as any,
+          (await readCase(partyAClient, "list_agreements")) as any,
       });
-      const agreementAfterCreate = await readContract(
-        partyAClient,
-        "get_agreement",
-        [agreementId],
-      );
-      expect(agreementAfterCreate.creator.toLowerCase()).toBe(
-        partyA.address.toLowerCase(),
-      );
-      expect(agreementAfterCreate.counterparty.toLowerCase()).toBe(
-        partyB.address.toLowerCase(),
-      );
+      const agreementAfterCreate = await readCase(partyAClient, "get_agreement", [agreementId]);
+      const specAfterCreate = await readCase(partyAClient, "get_agreement_spec", [agreementId]);
+      expect(agreementAfterCreate.creator.toLowerCase()).toBe(partyA.address.toLowerCase());
+      expect(agreementAfterCreate.counterparty.toLowerCase()).toBe(partyB.address.toLowerCase());
+      expect(specAfterCreate.commitment_hash).toMatch(/^[0-9a-f]{64}$/);
       state.agreementId = agreementId;
-      state.states = { agreementsBefore, agreementAfterCreate };
+      state.states = { agreementsBefore, agreementAfterCreate, specAfterCreate };
 
-      const agreementBeforeAccept = agreementAfterCreate;
       await send(
         "accept agreement as counterparty",
         partyBClient,
         partyB,
+        CONTRACT_ADDRESS,
         "accept_agreement",
         [agreementId],
         evidence,
       );
-      const agreementAfterAccept = await readContract(
-        partyBClient,
-        "get_agreement",
-        [agreementId],
-      );
+      const agreementAfterAccept = await readCase(partyBClient, "get_agreement", [agreementId]);
       expect(agreementAfterAccept.status).toBe("active");
-      state.states.agreementBeforeAccept = agreementBeforeAccept;
       state.states.agreementAfterAccept = agreementAfterAccept;
 
-      const claimSummary =
-        "The README-backed delivery obligation was not completed by the respondent.";
-      const disputeBefore = await readContract(
-        partyAClient,
-        "list_disputes_by_agreement",
-        [agreementId],
-      );
-      const filed = await send(
-        "file dispute as legitimate claimant",
+      await send(
+        "fund actual GEN agreement escrow",
         partyAClient,
         partyA,
-        "file_dispute",
-        [agreementId, claimSummary, "require_revision", [EVIDENCE_URL]],
+        CONTRACT_ADDRESS,
+        "fund_agreement",
+        [agreementId, 1000],
+        evidence,
+        1000n,
+      );
+      const milestones = await readCase(partyAClient, "list_milestones", [agreementId]);
+      const milestoneId = lastId(milestones, "list_milestones");
+      await send(
+        "allocate funded milestone",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "fund_milestone",
+        [agreementId, milestoneId],
+        evidence,
+      );
+      await send(
+        "register developer deliverable",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "submit_deliverable",
+        [agreementId, milestoneId, `github:${commitSha}`],
+        evidence,
+      );
+      const proofArgs = buildRegisterDeliveryProofArgs({
+        agreementId,
+        milestoneId,
+        repositoryUrl,
+        repositoryIdentity: "ometere123/caseweave",
+        commitSha,
+        pullRequest: { number: 1, head_sha: commitSha, merged: true },
+        changedFiles: ["contracts/caseweave.py", "app/lib/contract.ts"],
+        ciResults: {
+          commit_sha: commitSha,
+          conclusion: "success",
+          workflow: "caseweave-ci",
+        },
+        deploymentArtifacts: ["https://caseweave.vercel.app"],
+        evidenceUrl: EVIDENCE_URL,
+      });
+      const registered = await send(
+        "register commit-pinned delivery proof",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "register_delivery_proof",
+        proofArgs,
+        evidence,
+      );
+      const proofId =
+        extractTransactionReturnString(registered.receipt) ??
+        lastId(
+          await readCase(partyAClient, "list_delivery_proofs", [agreementId]),
+          "list_delivery_proofs",
+        );
+      const proofBeforeVerification = await readCase(partyAClient, "get_delivery_proof", [proofId]);
+      const verifiedProof = await send(
+        "verify delivery proof with independent validator web retrieval",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "verify_delivery_proof",
+        [proofId],
+        evidence,
+      );
+      const proofAfterVerification = await readCase(partyAClient, "get_delivery_proof", [proofId]);
+      expect(proofAfterVerification.status).toBe("verified");
+      expect(proofAfterVerification.content_hash).toMatch(/^[0-9a-f]{64}$/);
+      state.proof = { proofId, before: proofBeforeVerification, after: proofAfterVerification };
+      state.proofVerificationTransaction = verifiedProof.item;
+
+      const disputeBefore = await readCase(partyBClient, "list_disputes_by_agreement", [agreementId]);
+      const filed = await send(
+        "file performance dispute as the counterparty",
+        partyBClient,
+        partyB,
+        CONTRACT_ADDRESS,
+        "file_performance_dispute",
+        [
+          agreementId,
+          proofId,
+          "The developer did not satisfy the committed delivery obligation with independently verifiable evidence.",
+          "require_revision",
+        ],
         evidence,
       );
       const disputeId =
         extractTransactionReturnString(filed.receipt) ??
-        Object.keys(
-          await readContract(partyAClient, "list_disputes_by_agreement", [
-            agreementId,
-          ]),
-        )[0];
-      const disputeAfterFile = await readContract(partyAClient, "get_dispute", [
-        disputeId,
-      ]);
-      expect(disputeAfterFile.claimant.toLowerCase()).toBe(
-        partyA.address.toLowerCase(),
-      );
-      expect(disputeAfterFile.respondent.toLowerCase()).toBe(
-        partyB.address.toLowerCase(),
-      );
+        lastId(
+          await readCase(partyBClient, "list_disputes_by_agreement", [agreementId]),
+          "list_disputes_by_agreement",
+        );
       state.disputeId = disputeId;
       state.states.disputeBefore = disputeBefore;
-      state.states.disputeAfterFile = disputeAfterFile;
+      state.states.disputeAfterFile = await readCase(partyBClient, "get_dispute", [disputeId]);
 
-      const disputeBeforeResponse = disputeAfterFile;
       await send(
         "submit respondent response",
-        partyBClient,
-        partyB,
-        "submit_response",
-        [disputeId, "The respondent disputes the delivery claim.", []],
-        evidence,
-      );
-      const disputeAfterResponse = await readContract(
-        partyBClient,
-        "get_dispute",
-        [disputeId],
-      );
-      expect(disputeAfterResponse.status).toBe("awaiting_precedent_search");
-      state.states.disputeBeforeResponse = disputeBeforeResponse;
-      state.states.disputeAfterResponse = disputeAfterResponse;
-
-      const evidenceBefore = await readContract(
-        partyAClient,
-        "get_evidence_item",
-        [disputeId, "claimant", 0],
-      );
-      const verified = await send(
-        "verify immutable HTTPS evidence through GenLayer nondeterministic web fetch",
         partyAClient,
         partyA,
+        CONTRACT_ADDRESS,
+        "submit_response",
+        [
+          disputeId,
+          "The developer relies on the committed source and requests independent assessment.",
+          [],
+        ],
+        evidence,
+      );
+      const disputeAfterResponse = await readCase(partyAClient, "get_dispute", [disputeId]);
+      expect(disputeAfterResponse.status).toBe("awaiting_precedent_search");
+      state.states.disputeAfterResponse = disputeAfterResponse;
+
+      await send(
+        "verify claimant evidence snapshot",
+        partyBClient,
+        partyB,
+        CONTRACT_ADDRESS,
         "verify_evidence_url",
         [disputeId, "claimant", 0],
         evidence,
       );
-      const evidenceAfter = await readContract(
-        partyAClient,
-        "get_evidence_item",
-        [disputeId, "claimant", 0],
-      );
-      expect(evidenceAfter.status).toBe("verified");
-      expect(evidenceAfter.content_hash).toMatch(/^[0-9a-f]{64}$/);
-      expect(evidenceAfter.http_status).toBe(200);
-      state.states.evidenceBefore = evidenceBefore;
-      state.states.evidenceAfter = evidenceAfter;
-      state.evidenceTransaction = verified.item;
-
-      const disputeBeforeSearch = await readContract(
-        partyAClient,
-        "get_dispute",
-        [disputeId],
-      );
-      await send(
-        "request precedent search",
+      const challenge = await send(
+        "challenge a material evidence claim as respondent",
         partyAClient,
         partyA,
+        CONTRACT_ADDRESS,
+        "challenge_evidence",
+        [
+          disputeId,
+          "claimant",
+          0,
+          "incomplete",
+          "The fetched artifact does not by itself prove every contractual obligation or the absence of an unrelated completion condition.",
+          EVIDENCE_URL,
+        ],
+        evidence,
+      );
+      const challengeId =
+        extractTransactionReturnString(challenge.receipt) ??
+        lastId(
+          await readCase(partyAClient, "list_evidence_challenges", [disputeId]),
+          "list_evidence_challenges",
+        );
+      await send(
+        "resolve challenged evidence by independent evidence-court consensus",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "resolve_evidence_challenge",
+        [challengeId],
+        evidence,
+      );
+      await send(
+        "verify respondent counter-evidence snapshot",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "verify_evidence_url",
+        [disputeId, "respondent", 0],
+        evidence,
+      );
+      state.states.evidenceAfterChallenge = await readCase(
+        partyAClient,
+        "list_evidence_for_dispute",
+        [disputeId],
+      );
+
+      await send(
+        "request bounded precedent search",
+        partyBClient,
+        partyB,
+        CONTRACT_ADDRESS,
         "request_precedent_search",
         [disputeId],
         evidence,
       );
-      const disputeAfterSearch = await readContract(
-        partyAClient,
-        "get_dispute",
-        [disputeId],
-      );
-      expect(disputeAfterSearch.status).toBe("awaiting_verdict");
-      state.states.disputeBeforeSearch = disputeBeforeSearch;
-      state.states.disputeAfterSearch = disputeAfterSearch;
-
-      const disputeBeforeVerdict = disputeAfterSearch;
       await send(
-        "request AI-consensus verdict",
-        partyAClient,
-        partyA,
+        "request substantive AI-consensus verdict",
+        partyBClient,
+        partyB,
+        CONTRACT_ADDRESS,
         "request_verdict",
         [disputeId],
         evidence,
       );
-      const disputeAfterVerdict = await readContract(
-        partyAClient,
-        "get_dispute",
-        [disputeId],
-      );
-      expect(disputeAfterVerdict.status).toBe("verdict_reached");
-      expect(disputeAfterVerdict.verdict).toBeTruthy();
-      state.states.disputeBeforeVerdict = disputeBeforeVerdict;
-      state.states.disputeAfterVerdict = disputeAfterVerdict;
+      const verdictState = await readCase(partyBClient, "get_dispute", [disputeId]);
+      expect(verdictState.status).toBe("verdict_reached");
+      state.states.afterVerdict = verdictState;
 
-      const disputeBeforeFinalize = disputeAfterVerdict;
       const finalized = await send(
-        "finalize precedent",
-        partyAClient,
-        partyA,
+        "finalize immutable precedent and judgment",
+        partyBClient,
+        partyB,
+        CONTRACT_ADDRESS,
         "finalize_precedent",
         [disputeId],
         evidence,
       );
-      const caseId =
-        extractTransactionReturnString(finalized.receipt) ??
-        (await readContract(partyAClient, "get_dispute", [disputeId])).final_case_id;
-      const disputeAfterFinalize = await readContract(
-        partyAClient,
-        "get_dispute",
-        [disputeId],
-      );
-      const precedentAfterFinalize = await readContract(
-        partyAClient,
-        "get_precedent_case",
-        [caseId],
-      );
+      const finalizedDispute = await readCase(partyBClient, "get_dispute", [disputeId]);
+      const caseId = finalizedDispute.final_case_id || extractTransactionReturnString(finalized.receipt);
       expect(caseId).toMatch(/^CASE_/);
-      expect(disputeAfterFinalize.status).toBe("finalized");
-      expect(precedentAfterFinalize.dispute_id).toBe(disputeId);
+      const precedent = await readCase(partyBClient, "get_precedent_case", [caseId]);
+      const originalJudgment = await readCase(partyBClient, "get_current_judgment", [disputeId]);
+      expect(finalizedDispute.status).toBe("finalized");
       state.caseId = caseId;
-      state.states.disputeBeforeFinalize = disputeBeforeFinalize;
-      state.states.disputeAfterFinalize = disputeAfterFinalize;
-      state.states.precedentAfterFinalize = precedentAfterFinalize;
+      state.states.afterFinalize = {
+        dispute: finalizedDispute,
+        precedent,
+        judgment: originalJudgment,
+      };
 
-      const appealBefore = await readContract(partyAClient, "get_dispute", [
-        disputeId,
-      ]);
-      const filedAppeal = await send(
-        "file legitimate appeal as appellant",
+      const appeal = await send(
+        "file legitimate bonded appeal",
         partyAClient,
         partyA,
+        CONTRACT_ADDRESS,
         "file_appeal",
         [
           disputeId,
           "precedent_misapplied",
-          "Reconsider the application of the holding.",
+          "The first-instance holding should be independently reconsidered against the frozen evidence.",
           1,
         ],
         evidence,
+        1n,
       );
       const appealId =
-        extractTransactionReturnString(filedAppeal.receipt) ??
-        Object.keys(await readContract(partyAClient, "list_appeals"))[0];
-      const appealAfterFile = await readContract(partyAClient, "get_appeal", [
-        appealId,
-      ]);
-      const disputeAfterAppealFile = await readContract(
-        partyAClient,
-        "get_dispute",
-        [disputeId],
-      );
-      expect(appealAfterFile.status).toBe("under_review");
-      expect(disputeAfterAppealFile.status).toBe("under_appeal");
-      state.appealId = appealId;
-      state.states.appealBefore = appealBefore;
-      state.states.appealAfterFile = appealAfterFile;
-      state.states.disputeAfterAppealFile = disputeAfterAppealFile;
-
-      const unauthorizedBefore = {
-        appeal: await readContract(thirdClient, "get_appeal", [appealId]),
-        dispute: await readContract(thirdClient, "get_dispute", [disputeId]),
-        precedent: await readContract(thirdClient, "get_precedent_case", [caseId]),
+        extractTransactionReturnString(appeal.receipt) ??
+        lastId(await readCase(partyAClient, "list_appeals"), "list_appeals");
+      const appealBeforeUnauthorized = {
+        appeal: await readCase(thirdClient, "get_appeal", [appealId]),
+        dispute: await readCase(thirdClient, "get_dispute", [disputeId]),
+        precedent: await readCase(thirdClient, "get_precedent_case", [caseId]),
       };
       const unauthorized = await send(
-        "reject unrelated third-wallet appeal resolution",
+        "reject unrelated administrative appeal-resolution attempt",
         thirdClient,
         third,
+        CONTRACT_ADDRESS,
         "resolve_appeal",
         [appealId, "overturned_precedent"],
         evidence,
+        0n,
         false,
       );
-      const unauthorizedAfter = {
-        appeal: await readContract(thirdClient, "get_appeal", [appealId]),
-        dispute: await readContract(thirdClient, "get_dispute", [disputeId]),
-        precedent: await readContract(thirdClient, "get_precedent_case", [caseId]),
+      const afterUnauthorized = {
+        appeal: await readCase(thirdClient, "get_appeal", [appealId]),
+        dispute: await readCase(thirdClient, "get_dispute", [disputeId]),
+        precedent: await readCase(thirdClient, "get_precedent_case", [caseId]),
       };
-      expect(unauthorizedAfter).toEqual(unauthorizedBefore);
-      state.unauthorizedResolution = {
+      expect(afterUnauthorized).toEqual(appealBeforeUnauthorized);
+      state.unauthorizedAppealResolution = {
         transaction: unauthorized.item,
-        before: unauthorizedBefore,
-        after: unauthorizedAfter,
+        before: appealBeforeUnauthorized,
+        after: afterUnauthorized,
       };
 
-      const authorizedBefore = unauthorizedAfter;
-      const resolved = await send(
-        "resolve appeal as owner",
+      const appellate = await send(
+        "request independent appellate validator consensus",
         ownerClient,
         owner,
-        "resolve_appeal",
-        [appealId, "overturned_precedent"],
+        CONTRACT_ADDRESS,
+        "request_appeal_review",
+        [appealId],
         evidence,
       );
-      const finalState = {
-        appeal: await readContract(ownerClient, "get_appeal", [appealId]),
-        dispute: await readContract(ownerClient, "get_dispute", [disputeId]),
-        precedent: await readContract(ownerClient, "get_precedent_case", [caseId]),
+      const afterAppeal = {
+        appeal: await readCase(ownerClient, "get_appeal", [appealId]),
+        dispute: await readCase(ownerClient, "get_dispute", [disputeId]),
+        precedent: await readCase(ownerClient, "get_precedent_case", [caseId]),
+        judgment: await readCase(ownerClient, "get_current_judgment", [disputeId]),
       };
-      expect(finalState.appeal.status).toBe("resolved");
-      expect(finalState.appeal.result).toBe("overturned_precedent");
-      expect(finalState.dispute.status).toBe("finalized");
-      expect(finalState.precedent.status).toBe("overturned");
-      state.authorizedResolution = {
-        transaction: resolved.item,
-        before: authorizedBefore,
-        after: finalState,
+      expect(afterAppeal.appeal.status).toBe("resolved");
+      expect(afterAppeal.dispute.status).toBe("finalized");
+      expect(afterAppeal.judgment.status).toBe("finalized");
+      state.appealId = appealId;
+      state.appellateDecision = appellate.item;
+      state.states.afterAppeal = afterAppeal;
+
+      if (!CONSUMER_ADDRESS) {
+        throw new Error("CASEWEAVE_E2E_CONSUMER_ADDRESS is required for the cross-contract proof");
+      }
+      const currentJudgment = afterAppeal.judgment;
+      const consumed = await send(
+        "consume finalized judgment from the second Intelligent Contract",
+        ownerClient,
+        owner,
+        CONSUMER_ADDRESS,
+        "consume_judgment",
+        [
+          toCalldataAddress(CONTRACT_ADDRESS),
+          currentJudgment.judgment_id,
+          agreementId,
+          disputeId,
+          Number(currentJudgment.version),
+        ],
+        evidence,
+      );
+      const consumedJudgment = await readConsumer(ownerClient, "get_consumed", [currentJudgment.judgment_id]);
+      expect(consumedJudgment.judgment_id).toBe(currentJudgment.judgment_id);
+      expect(consumedJudgment.version).toBe(Number(currentJudgment.version));
+      state.consumer = { transaction: consumed.item, record: consumedJudgment };
+
+      const settlement = await send(
+        "execute deterministic funded settlement",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "settle_judgment",
+        [disputeId],
+        evidence,
+      );
+      const childIds = settlement.childTransactionIds.length
+        ? settlement.childTransactionIds
+        : await waitForTriggered(partyAClient, settlement.hash);
+      if (childIds.length === 0) {
+        throw new Error("settlement finalized without a tracked child transfer transaction");
+      }
+      const childHash = childIds[0];
+      const childReceipt = await partyAClient.waitForTransactionReceipt({
+        hash: childHash as any,
+        status: TransactionStatus.FINALIZED,
+        retries: 180,
+        interval: 3000,
+      });
+      const childFull = await partyAClient.getTransaction({ hash: childHash as any }).catch(() => null);
+      const child = mergedReceipt(childReceipt, childFull);
+      const childError = getExecutionError(child);
+      if (childError) throw new Error(`child settlement transfer failed: ${childError}`);
+      const transferId =
+        extractTransactionReturnString(settlement.receipt) ??
+        lastId(await readCase(partyAClient, "list_transfers", [agreementId]), "list_transfers");
+      const transferBeforeConfirmation = await readCase(partyAClient, "get_transfer", [transferId]);
+      const recipient = String(transferBeforeConfirmation.recipient).toLowerCase();
+      const recipientClient = recipient === partyA.address.toLowerCase() ? partyAClient : partyBClient;
+      const recipientAccount = recipient === partyA.address.toLowerCase() ? partyA : partyB;
+      const confirmed = await send(
+        "confirm settlement only after child transfer finality",
+        recipientClient,
+        recipientAccount,
+        CONTRACT_ADDRESS,
+        "confirm_transfer",
+        [transferId, childHash],
+        evidence,
+      );
+      const transferAfterConfirmation = await readCase(recipientClient, "get_transfer", [transferId]);
+      const escrowAfterSettlement = await readCase(recipientClient, "get_escrow", [agreementId]);
+      const accounting = await readCase(recipientClient, "get_accounting_invariant");
+      expect(transferAfterConfirmation.status).toBe("delivered");
+      expect(escrowAfterSettlement.pending_transfer).toBe(0);
+      expect(accounting.solvent).toBe(true);
+      state.settlement = {
+        transaction: settlement.item,
+        childTransaction: {
+          hash: childHash,
+          explorer: getExplorerTxUrl(childHash),
+          consensusStatus: child.statusName ?? child.status,
+          executionResult: leaderReceipt(child)?.execution_result ?? "UNKNOWN",
+        },
+        confirmation: confirmed.item,
+        transferBeforeConfirmation,
+        transferAfterConfirmation,
+        escrowAfterSettlement,
+        accounting,
       };
-      state.finalState = finalState;
-      writeOutput(state);
+      state.finalState = afterAppeal;
+      writeOutput();
     } catch (error) {
       state.failure = error instanceof Error ? error.message : String(error);
-      writeOutput(state);
+      writeOutput();
       throw error;
     }
   },
-  45 * 60 * 1000,
+  90 * 60 * 1000,
 );

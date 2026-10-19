@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { readContract, writeContract } from "../../../lib/genlayer";
+import { getExplorerTxUrl, readContract, writeContract } from "../../../lib/genlayer";
 import { useWallet } from "../../../store/useWallet";
-import type { Agreement, Dispute } from "../../../lib/contract";
+import type { Agreement, AgreementSpec, Dispute, Milestone, TransferRecord } from "../../../lib/contract";
+import { buildRegisterDeliveryProofArgs } from "../../../lib/contract";
 import { ALLOWED_REQUESTED_OUTCOMES } from "../../../lib/contract";
 import { ObligationLens } from "../../../components/ObligationLens";
 import { AgreementTextViewer } from "../../../components/AgreementTextViewer";
@@ -13,19 +14,31 @@ import { CaseTimeline } from "../../../components/CaseTimeline";
 export function AgreementChamberClient({ agreementId }: { agreementId: string }) {
   const { address, connect } = useWallet();
   const [agreement, setAgreement] = useState<Agreement | null>(null);
+  const [spec, setSpec] = useState<AgreementSpec | null>(null);
+  const [milestones, setMilestones] = useState<Record<string, Milestone>>({});
   const [disputes, setDisputes] = useState<Record<string, Dispute>>({});
+  const [transfers, setTransfers] = useState<Record<string, TransferRecord>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
+  const [fundAmount, setFundAmount] = useState("100");
+  const [lastTransaction, setLastTransaction] = useState<string | null>(null);
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [ag, disp] = await Promise.all([
+      const [ag, commitment, milestoneRows, disp, transferRows] = await Promise.all([
         readContract("get_agreement", [agreementId]),
+        readContract("get_agreement_spec", [agreementId]),
+        readContract("list_milestones", [agreementId]),
         readContract("list_disputes_by_agreement", [agreementId]),
+        readContract("list_transfers", [agreementId]),
       ]);
       setAgreement(ag as Agreement);
+      setSpec(commitment as AgreementSpec);
+      setMilestones(milestoneRows as Record<string, Milestone>);
       setDisputes(disp as Record<string, Dispute>);
+      setTransfers(transferRows as Record<string, TransferRecord>);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load agreement");
     }
@@ -42,10 +55,83 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
     setBusy(true);
     setError(null);
     try {
-      await writeContract(address, "accept_agreement", [agreementId]);
+      const result = await writeContract(address, "accept_agreement", [agreementId]);
+      setLastTransaction(result.hash);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to accept agreement");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleFund() {
+    if (!address) return connect();
+    const amount = Number(fundAmount);
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      setError("Funding amount must be a positive whole number of GEN.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await writeContract(
+        address,
+        "fund_agreement",
+        [agreementId, amount],
+        BigInt(amount),
+      );
+      setLastTransaction(result.hash);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fund agreement");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleFundMilestone(milestoneId: string) {
+    if (!address) return connect();
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await writeContract(address, "fund_milestone", [agreementId, milestoneId]);
+      setLastTransaction(result.hash);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to allocate milestone funds");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeliveryProof(input: {
+    milestoneId: string;
+    repositoryUrl: string;
+    repositoryIdentity: string;
+    commitSha: string;
+    pullRequest: Record<string, unknown>;
+    changedFiles: string[];
+    ciResults: Record<string, unknown>;
+    deploymentArtifacts: string[];
+    evidenceUrl: string;
+  }) {
+    if (!address) return connect();
+    setBusy(true);
+    setError(null);
+    try {
+      const submitted = await writeContract(address, "submit_deliverable", [agreementId, input.milestoneId, `github:${input.commitSha}`]);
+      setLastTransaction(submitted.hash);
+      const registered = await writeContract(
+        address,
+        "register_delivery_proof",
+        buildRegisterDeliveryProofArgs({ agreementId, ...input }),
+      );
+      setLastTransaction(registered.hash);
+      setSelectedMilestoneId(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to register delivery proof");
     } finally {
       setBusy(false);
     }
@@ -64,6 +150,7 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
   const relatedCases = disputeEntries
     .filter((d) => d.final_case_id)
     .map((d) => d.final_case_id);
+  const transferEntries = Object.values(transfers);
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-14">
@@ -77,6 +164,21 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
           <Panel title="Agreement Text">
             <AgreementTextViewer text={agreement.agreement_text} />
           </Panel>
+          {spec && (
+            <Panel title="Immutable technical commitment">
+              <p className="text-xs text-parchment/90 leading-relaxed">{spec.acceptance_criteria}</p>
+              <p className="text-[11px] text-muted mt-3">repository identity</p>
+              <p className="text-xs font-mono text-paper break-all">{spec.repository_identity || "not specified"}</p>
+              {spec.repository_url && (
+                <a href={spec.repository_url} target="_blank" rel="noreferrer" className="text-xs text-citation underline break-all">
+                  Open committed repository
+                </a>
+              )}
+              <p className="text-[11px] text-muted mt-3">commitment SHA-256</p>
+              <p className="text-[10px] font-mono text-paper break-all">{spec.commitment_hash}</p>
+              <p className="text-xs text-muted mt-3">{spec.completion_conditions}</p>
+            </Panel>
+          )}
           <Panel title="Parties">
             <p className="text-xs font-mono text-muted">Creator</p>
             <p className="text-xs font-mono text-paper break-all mb-2">{agreement.creator}</p>
@@ -141,6 +243,88 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
               ))}
             </div>
           </Panel>
+
+          <Panel title="Escrow accounting">
+            <div className="grid grid-cols-2 gap-y-2 text-xs font-mono">
+              <span className="text-muted">deposited</span><span className="text-paper text-right">{agreement.escrow?.actual_deposited ?? 0} GEN</span>
+              <span className="text-muted">available</span><span className="text-paper text-right">{agreement.escrow?.available ?? 0} GEN</span>
+              <span className="text-muted">committed</span><span className="text-paper text-right">{agreement.escrow?.committed ?? 0} GEN</span>
+              <span className="text-muted">pending transfer</span><span className="text-paper text-right">{agreement.escrow?.pending_transfer ?? 0} GEN</span>
+              <span className="text-muted">settled</span><span className="text-paper text-right">{agreement.escrow?.settled ?? 0} GEN</span>
+            </div>
+            {address?.toLowerCase() === agreement.creator.toLowerCase() && ["active", "disputed"].includes(agreement.status) && (
+              <div className="mt-4 space-y-2">
+                <label className="block text-[10px] uppercase tracking-wide text-muted">Fund agreement with native GEN</label>
+                <div className="flex gap-2">
+                  <input aria-label="Funding amount in GEN" type="number" min={1} step={1} value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} className="input" />
+                  <button onClick={handleFund} disabled={busy} className="bg-gold text-ink font-mono text-xs px-3 rounded-sm disabled:opacity-50">{busy ? "Funding…" : "Fund"}</button>
+                </div>
+                <p className="text-[11px] text-muted">Displayed amounts are not deposited funds until this payable transaction finalizes.</p>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Payment reconciliation">
+            {transferEntries.length === 0 ? (
+              <p className="text-xs text-muted italic">No settlement transfer has been created.</p>
+            ) : (
+              <div className="space-y-3">
+                {transferEntries.map((transfer) => (
+                  <div key={transfer.transfer_id} className="border border-line/40 rounded-sm p-2">
+                    <div className="flex justify-between gap-2 text-xs font-mono">
+                      <span className="text-paper">{transfer.transfer_id}</span>
+                      <span className="text-verdict uppercase">{transfer.status}</span>
+                    </div>
+                    <p className="text-[11px] text-muted mt-1">{transfer.amount} GEN · recipient {transfer.recipient.slice(0, 12)}…</p>
+                    {transfer.child_transaction_id && (
+                      <a
+                        className="text-[10px] text-citation underline break-all"
+                        href={getExplorerTxUrl(transfer.child_transaction_id)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        child transfer {transfer.child_transaction_id.slice(0, 14)}…
+                      </a>
+                    )}
+                    {transfer.status === "pending" && (
+                      <p className="text-[10px] text-muted mt-1">Awaiting child finality and recipient confirmation.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Milestones">
+            {Object.values(milestones).length === 0 ? <p className="text-xs text-muted italic">No named milestones.</p> : (
+              <div className="space-y-2">
+                {Object.values(milestones).map((milestone) => (
+                  <div key={milestone.milestone_id} className="border border-line/40 rounded-sm p-2">
+                    <div className="flex justify-between gap-2"><span className="text-xs text-paper">{milestone.name}</span><span className="font-mono text-[10px] text-gold">{milestone.status}</span></div>
+                    <p className="text-[11px] text-muted mt-1">{milestone.acceptance_criteria}</p>
+                    <p className="font-mono text-[10px] text-muted mt-1">{milestone.amount} GEN · due {milestone.deadline}</p>
+                    {address?.toLowerCase() === agreement.creator.toLowerCase() && milestone.status === "unfunded" && (
+                      <button onClick={() => handleFundMilestone(milestone.milestone_id)} disabled={busy} className="mt-2 border border-gold/60 text-gold font-mono text-[10px] px-2 py-1 rounded-sm disabled:opacity-50">Allocate committed funds</button>
+                    )}
+                    {address?.toLowerCase() === agreement.creator.toLowerCase() && ["funded", "submitted"].includes(milestone.status) && (
+                      <button onClick={() => setSelectedMilestoneId(milestone.milestone_id)} className="mt-2 border border-citation/60 text-citation font-mono text-[10px] px-2 py-1 rounded-sm">Register proof</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {selectedMilestoneId && (
+              <DeliveryProofForm
+                repositoryIdentity={spec?.repository_identity ?? ""}
+                onSubmit={(input) => handleDeliveryProof({ milestoneId: selectedMilestoneId, ...input })}
+                busy={busy}
+              />
+            )}
+          </Panel>
+
+          {lastTransaction && (
+            <p className="text-[11px] text-muted">Last finalized transaction: <a className="text-citation underline" href={getExplorerTxUrl(lastTransaction)} target="_blank" rel="noreferrer">{lastTransaction.slice(0, 14)}…</a></p>
+          )}
 
           <Panel title="Related Cases">
             {relatedCases.length === 0 ? (
@@ -344,6 +528,65 @@ function FileDisputeForm({
         {submitting ? "Filing…" : "Submit Dispute"}
       </button>
     </form>
+  );
+}
+
+function DeliveryProofForm({
+  repositoryIdentity,
+  onSubmit,
+  busy,
+}: {
+  repositoryIdentity: string;
+  onSubmit: (input: {
+    repositoryUrl: string;
+    repositoryIdentity: string;
+    commitSha: string;
+    pullRequest: Record<string, unknown>;
+    changedFiles: string[];
+    ciResults: Record<string, unknown>;
+    deploymentArtifacts: string[];
+    evidenceUrl: string;
+  }) => void;
+  busy: boolean;
+}) {
+  const [repositoryUrl, setRepositoryUrl] = useState("https://github.com/ometere123/caseweave");
+  const [identity, setIdentity] = useState(repositoryIdentity);
+  const [commitSha, setCommitSha] = useState("");
+  const [pullRequestNumber, setPullRequestNumber] = useState("");
+  const [changedFiles, setChangedFiles] = useState("");
+  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [ciStatus, setCiStatus] = useState("success");
+  const [deploymentArtifact, setDeploymentArtifact] = useState("");
+
+  return (
+    <div className="mt-3 border border-citation/30 rounded-sm p-3 space-y-2">
+      <p className="font-mono text-[10px] uppercase tracking-wide text-citation">Authenticated delivery proof</p>
+      <p className="text-[11px] text-muted">Use a full commit SHA and a raw.githubusercontent.com URL containing that exact SHA. Validators fetch the source independently.</p>
+      <input aria-label="Repository URL" value={repositoryUrl} onChange={(e) => setRepositoryUrl(e.target.value)} placeholder="GitHub repository URL" className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper font-mono" />
+      <input aria-label="Repository identity" value={identity} onChange={(e) => setIdentity(e.target.value)} placeholder="owner/repository" className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper font-mono" />
+      <input aria-label="Immutable commit SHA" required value={commitSha} onChange={(e) => setCommitSha(e.target.value)} placeholder="Immutable commit SHA" className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper font-mono" />
+      <div className="grid grid-cols-2 gap-2">
+        <input aria-label="Pull request number" value={pullRequestNumber} onChange={(e) => setPullRequestNumber(e.target.value)} placeholder="PR number" className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper" />
+        <select aria-label="CI result" value={ciStatus} onChange={(e) => setCiStatus(e.target.value)} className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper"><option>success</option><option>failure</option><option>inconclusive</option></select>
+      </div>
+      <textarea aria-label="Changed files" rows={2} value={changedFiles} onChange={(e) => setChangedFiles(e.target.value)} placeholder="Changed files, one per line" className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper font-mono" />
+      <input aria-label="Pinned evidence URL" required value={evidenceUrl} onChange={(e) => setEvidenceUrl(e.target.value)} placeholder="https://raw.githubusercontent.com/owner/repo/SHA/file" className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper font-mono" />
+      <input aria-label="Deployment artifact URL" value={deploymentArtifact} onChange={(e) => setDeploymentArtifact(e.target.value)} placeholder="Optional deployment artifact URL" className="w-full bg-ink border border-line/50 rounded-sm px-2 py-1 text-xs text-paper font-mono" />
+      <button
+        onClick={() => onSubmit({
+          repositoryUrl,
+          repositoryIdentity: identity,
+          commitSha,
+          pullRequest: { number: Number(pullRequestNumber) || 0, immutable_commit: commitSha },
+          changedFiles: changedFiles.split("\n").map((value) => value.trim()).filter(Boolean),
+          ciResults: { status: ciStatus, commit_sha: commitSha },
+          deploymentArtifacts: deploymentArtifact ? [deploymentArtifact] : [],
+          evidenceUrl,
+        })}
+        disabled={busy || !commitSha || !evidenceUrl}
+        className="bg-citation text-ink font-mono text-xs px-3 py-1.5 rounded-sm disabled:opacity-50"
+      >{busy ? "Registering…" : "Submit and register proof"}</button>
+    </div>
   );
 }
 
