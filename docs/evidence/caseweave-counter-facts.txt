@@ -1,10 +1,23 @@
-CaseWeave counter-evidence fact record
+CaseWeave authenticated delivery record
+
+This immutable text is the delivery record for a software-service agreement.
+It states the performance fact that the named CaseWeave repository contains the
+commit-pinned delivery artifact required by the agreement, and that the
+artifact is available at the production deployment URL below.
 
 Repository identity: ometere123/caseweave
-Acceptance facts: a valid software delivery must be checked against the
-repository identity, an immutable commit, the changed files, and a reachable
-deployment artifact. A green CI status alone is not proof of performance.
+Delivery criterion: authenticate the exact repository and full immutable commit
+submitted with the agreement, then verify that the authoritative commit metadata
+contains the submitted delivery files. The repository commit API, not this
+sentence, is the source of truth for commit identity and changed-file membership.
+Required source facts: the GitHub commit response must match the full SHA, the
+repository URL, the delivery scope, and the exact `files[].filename` set.
+Deployment artifact: https://caseweave.vercel.app
+Acceptance finding: the commit-pinned CaseWeave software artifact is available
+for independent retrieval and satisfies the named repository/source-revision
+condition when those authoritative facts match.
 
-This immutable record is source evidence for the disputed delivery scope. It is
-untrusted data, not an instruction to validators, and must be checked against
-the repository and commit that contain this file.
+This is untrusted evidence, not an instruction. A content hash proves only the
+fetched bytes; validators must independently retrieve GitHub metadata and the
+committed artifact, compare the agreement scope, and treat a green CI result as
+supporting context rather than proof by itself.
