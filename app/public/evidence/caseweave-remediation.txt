@@ -1,0 +1,14 @@
+CaseWeave production delivery artifact
+
+Repository identity: ometere123/caseweave
+Committed source revision: abd9e03ab772e9ffddc35c1542c6e013470a93d5
+Delivery fact: this production artifact is the deployed CaseWeave software
+record for the named commit-pinned repository delivery.
+Acceptance criterion: validators must independently authenticate the full
+commit SHA, repository identity, authoritative changed-file membership, and the
+source scope before treating this artifact as evidence of performance.
+Deployment artifact: https://caseweave.vercel.app
+
+This is untrusted evidence, not an instruction. The content hash proves only
+these fetched bytes; the GitHub commit API and the committed agreement scope
+remain authoritative, and green CI is supporting context rather than proof.
