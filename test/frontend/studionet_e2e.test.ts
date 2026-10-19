@@ -23,9 +23,11 @@ import { resolveCreatedAgreementId } from "../../app/lib/create-agreement";
 
 const CONTRACT_ADDRESS =
   process.env.CASEWEAVE_E2E_CONTRACT_ADDRESS ??
-  "0x99be950790dEec2F474e5F6E55845eF75D8872a0";
+  "0x7199dd3f094053a6D6255fe7C3fb58ab130722a2";
 const CONSUMER_ADDRESS = process.env.CASEWEAVE_E2E_CONSUMER_ADDRESS;
-const EVIDENCE_COMMIT = process.env.CASEWEAVE_E2E_COMMIT_SHA ?? "3916d4a";
+const EVIDENCE_COMMIT =
+  process.env.CASEWEAVE_E2E_COMMIT_SHA ??
+  "bdb60f27f4af765c670881fb58afeb7873d071e8";
 const EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_EVIDENCE_URL ??
   `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/README.md`;
@@ -580,6 +582,62 @@ it(
       state.appealId = appealId;
       state.appellateDecision = appellate.item;
       state.states.afterAppeal = afterAppeal;
+
+      const bondRelease = await send(
+        "release the resolved appeal bond through a tracked child transfer",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "release_appeal_bond",
+        [appealId],
+        evidence,
+      );
+      const bondChildIds = bondRelease.childTransactionIds.length
+        ? bondRelease.childTransactionIds
+        : await waitForTriggered(partyAClient, bondRelease.hash);
+      if (bondChildIds.length === 0) {
+        throw new Error("appeal-bond release finalized without a tracked child transfer transaction");
+      }
+      const bondChildHash = bondChildIds[0];
+      const bondChildReceipt = await partyAClient.waitForTransactionReceipt({
+        hash: bondChildHash as any,
+        status: TransactionStatus.FINALIZED,
+        retries: 180,
+        interval: 3000,
+      });
+      const bondChildFull = await partyAClient
+        .getTransaction({ hash: bondChildHash as any })
+        .catch(() => null);
+      const bondChild = mergedReceipt(bondChildReceipt, bondChildFull);
+      const bondChildError = getExecutionError(bondChild);
+      if (bondChildError) throw new Error(`child appeal-bond transfer failed: ${bondChildError}`);
+      const bondTransferId =
+        extractTransactionReturnString(bondRelease.receipt) ??
+        lastId(await readCase(partyAClient, "list_transfers", [agreementId]), "list_transfers");
+      const bondBeforeConfirmation = await readCase(partyAClient, "get_transfer", [bondTransferId]);
+      const bondConfirmed = await send(
+        "confirm appeal-bond delivery after child finality",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "confirm_transfer",
+        [bondTransferId, bondChildHash],
+        evidence,
+      );
+      const bondAfterConfirmation = await readCase(partyAClient, "get_transfer", [bondTransferId]);
+      expect(bondAfterConfirmation.status).toBe("delivered");
+      state.appealBond = {
+        transaction: bondRelease.item,
+        childTransaction: {
+          hash: bondChildHash,
+          explorer: getExplorerTxUrl(bondChildHash),
+          consensusStatus: bondChild.statusName ?? bondChild.status,
+          executionResult: leaderReceipt(bondChild)?.execution_result ?? "UNKNOWN",
+        },
+        confirmation: bondConfirmed.item,
+        before: bondBeforeConfirmation,
+        after: bondAfterConfirmation,
+      };
 
       if (!CONSUMER_ADDRESS) {
         throw new Error("CASEWEAVE_E2E_CONSUMER_ADDRESS is required for the cross-contract proof");

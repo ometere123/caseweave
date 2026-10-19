@@ -3,10 +3,11 @@ import { assertDistinctCounterparty } from "./address";
 
 export const CASEWEAVE_CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS ??
-    "0x99be950790dEec2F474e5F6E55845eF75D8872a0") as `0x${string}`;
+    "0x7199dd3f094053a6D6255fe7C3fb58ab130722a2") as `0x${string}`;
 
 export const CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS =
-  (process.env.NEXT_PUBLIC_CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS ?? "") as `0x${string}` | "";
+  (process.env.NEXT_PUBLIC_CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS ??
+    "0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71") as `0x${string}` | "";
 
 export const EVIDENCE_STATUSES = [
   "unverified",
