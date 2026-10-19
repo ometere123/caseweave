@@ -44,7 +44,7 @@ agreement read match the submitted values.
 - Deployment transaction: <https://explorer-studio.genlayer.com/tx/0x99aa01c15af3d8fb9acc1deca9ce79339335f09df26b34b83ae14a983134d412>
 - Owner confirmed by `get_owner()`: `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7`
 - Contract source SHA-256: `8B0140180C121BD7414C3878462DBD04E39CCEB507E749C2E97A2B73A7E764E3`
-- Source commit: `PENDING_FINAL_COMMIT`
+- Source commit: `8b95829`
 
 The deployment receipt reached `FINALIZED`, its result was majority agree, and
 the leader GenVM result was `SUCCESS`. The deployed schema contains the
