@@ -98,6 +98,32 @@ async function getTransactionWithRetry(client: any, hash: string, attempts = 12)
     : new Error("Unable to retrieve transaction metadata");
 }
 
+async function waitForFinalizedReceipt(client: any, hash: string, attempts = 4) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await client.waitForTransactionReceipt({
+        hash: hash as any,
+        status: TransactionStatus.FINALIZED,
+        retries: 180,
+        interval: 3000,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(1500 * (attempt + 1), 5000)),
+        );
+      }
+    }
+  }
+  throw new Error(
+    `Transaction ${hash} could not be read to finality after retries: ${
+      lastError instanceof Error ? lastError.message : String(lastError)
+    }`,
+  );
+}
+
 async function readCase(client: any, functionName: string, args: any[] = []) {
   return client.readContract({
     address: CONTRACT_ADDRESS,
@@ -147,12 +173,7 @@ async function send(
     args,
     value,
   });
-  const waited = await client.waitForTransactionReceipt({
-    hash,
-    status: TransactionStatus.FINALIZED,
-    retries: 180,
-    interval: 3000,
-  });
+  const waited = await waitForFinalizedReceipt(client, hash);
   const full = await getTransactionWithRetry(client, hash).catch(() => null);
   const receipt = mergedReceipt(waited, full);
   const leader = leaderReceipt(receipt);
@@ -618,12 +639,7 @@ it(
         throw new Error("appeal-bond release finalized without a tracked child transfer transaction");
       }
       const bondChildHash = bondChildIds[0];
-      const bondChildReceipt = await partyAClient.waitForTransactionReceipt({
-        hash: bondChildHash as any,
-        status: TransactionStatus.FINALIZED,
-        retries: 180,
-        interval: 3000,
-      });
+      const bondChildReceipt = await waitForFinalizedReceipt(partyAClient, bondChildHash);
       const bondChildFull = await getTransactionWithRetry(partyAClient, bondChildHash).catch(() => null);
       const bondChild = mergedReceipt(bondChildReceipt, bondChildFull);
       const bondChildError = getExecutionError(bondChild);
@@ -696,12 +712,7 @@ it(
         throw new Error("settlement finalized without a tracked child transfer transaction");
       }
       const childHash = childIds[0];
-      const childReceipt = await partyAClient.waitForTransactionReceipt({
-        hash: childHash as any,
-        status: TransactionStatus.FINALIZED,
-        retries: 180,
-        interval: 3000,
-      });
+      const childReceipt = await waitForFinalizedReceipt(partyAClient, childHash);
       const childFull = await getTransactionWithRetry(partyAClient, childHash).catch(() => null);
       const child = mergedReceipt(childReceipt, childFull);
       const childError = getExecutionError(child);

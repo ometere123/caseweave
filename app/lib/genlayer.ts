@@ -123,6 +123,36 @@ async function getTransactionWithRetry(
     : new Error("Unable to retrieve the finalized transaction metadata.");
 }
 
+async function waitForFinalizedReceipt(
+  client: ReturnType<typeof getReadClient>,
+  hash: Hash,
+  attempts = 4,
+) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await client.waitForTransactionReceipt({
+        hash,
+        status: TransactionStatus.FINALIZED,
+        retries: 120,
+        interval: 3000,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(1500 * (attempt + 1), 5000)),
+        );
+      }
+    }
+  }
+  throw new Error(
+    `Transaction ${hash} could not be read to finality after retries. ` +
+      `Inspect ${getExplorerTxUrl(hash)}. ` +
+      `${lastError instanceof Error ? lastError.message : String(lastError)}`,
+  );
+}
+
 function parseReceiptResult(result: unknown): unknown {
   if (typeof result !== "string") return result;
   try {
@@ -262,12 +292,7 @@ export async function writeContract(
     args,
     value,
   });
-  const waitedReceipt = await client.waitForTransactionReceipt({
-    hash,
-    status: TransactionStatus.FINALIZED,
-    retries: 120,
-    interval: 3000,
-  });
+  const waitedReceipt = await waitForFinalizedReceipt(client, hash as Hash);
   const fullReceipt = await getTransactionWithRetry(client, hash as Hash);
   const receipt = mergeReceipts(waitedReceipt, fullReceipt);
   assertExecutionSucceeded(hash, receipt);
