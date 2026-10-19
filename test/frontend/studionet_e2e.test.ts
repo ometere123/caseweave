@@ -79,6 +79,25 @@ function mergedReceipt(waited: any, full: any): ReceiptLike {
   } as ReceiptLike;
 }
 
+async function getTransactionWithRetry(client: any, hash: string, attempts = 12) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await client.getTransaction({ hash: hash as any });
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(1000 * (attempt + 1), 5000)),
+        );
+      }
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Unable to retrieve transaction metadata");
+}
+
 async function readCase(client: any, functionName: string, args: any[] = []) {
   return client.readContract({
     address: CONTRACT_ADDRESS,
@@ -134,7 +153,7 @@ async function send(
     retries: 180,
     interval: 3000,
   });
-  const full = await client.getTransaction({ hash }).catch(() => null);
+  const full = await getTransactionWithRetry(client, hash).catch(() => null);
   const receipt = mergedReceipt(waited, full);
   const leader = leaderReceipt(receipt);
   const executionResult = leader?.execution_result ?? "UNKNOWN";
@@ -605,9 +624,7 @@ it(
         retries: 180,
         interval: 3000,
       });
-      const bondChildFull = await partyAClient
-        .getTransaction({ hash: bondChildHash as any })
-        .catch(() => null);
+      const bondChildFull = await getTransactionWithRetry(partyAClient, bondChildHash).catch(() => null);
       const bondChild = mergedReceipt(bondChildReceipt, bondChildFull);
       const bondChildError = getExecutionError(bondChild);
       if (bondChildError) throw new Error(`child appeal-bond transfer failed: ${bondChildError}`);
@@ -685,7 +702,7 @@ it(
         retries: 180,
         interval: 3000,
       });
-      const childFull = await partyAClient.getTransaction({ hash: childHash as any }).catch(() => null);
+      const childFull = await getTransactionWithRetry(partyAClient, childHash).catch(() => null);
       const child = mergedReceipt(childReceipt, childFull);
       const childError = getExecutionError(child);
       if (childError) throw new Error(`child settlement transfer failed: ${childError}`);

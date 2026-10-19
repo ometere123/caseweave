@@ -100,6 +100,29 @@ function mergeReceipts(
   } as ReceiptLike;
 }
 
+async function getTransactionWithRetry(
+  client: ReturnType<typeof getReadClient>,
+  hash: Hash,
+  attempts = 12,
+) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await client.getTransaction({ hash });
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(1000 * (attempt + 1), 5000)),
+        );
+      }
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Unable to retrieve the finalized transaction metadata.");
+}
+
 function parseReceiptResult(result: unknown): unknown {
   if (typeof result !== "string") return result;
   try {
@@ -245,7 +268,7 @@ export async function writeContract(
     retries: 120,
     interval: 3000,
   });
-  const fullReceipt = await client.getTransaction({ hash });
+  const fullReceipt = await getTransactionWithRetry(client, hash as Hash);
   const receipt = mergeReceipts(waitedReceipt, fullReceipt);
   assertExecutionSucceeded(hash, receipt);
   return { hash, receipt };
