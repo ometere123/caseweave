@@ -30,7 +30,7 @@ const EVIDENCE_COMMIT =
   "b528a8ed178b417e718116935d30808e54392761";
 const EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_EVIDENCE_URL ??
-  `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/README.md`;
+  `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-delivery.md`;
 
 type AccountName = "owner" | "party_a" | "party_b" | "third";
 
@@ -374,7 +374,11 @@ it(
         repositoryIdentity: "ometere123/caseweave",
         commitSha,
         pullRequest: { number: 1, head_sha: commitSha, merged: true },
-        changedFiles: ["contracts/caseweave.py", "app/lib/contract.ts"],
+        changedFiles: [
+          "contracts/caseweave.py",
+          "app/lib/contract.ts",
+          "docs/evidence/caseweave-delivery.md",
+        ],
         ciResults: {
           commit_sha: commitSha,
           conclusion: "success",
