@@ -1191,6 +1191,34 @@ Include exactly one finding for every expected obligation id.
                 "summary": str(parsed.get("summary", ""))[:500],
             }, sort_keys=True)
 
+        def canonical_obligation_findings(items):
+            """Return only the bounded, objective part of a proof assessment.
+
+            Validator explanations are intentionally allowed to differ: they are
+            natural-language justifications, not the consensus boundary. The
+            obligation identity and finding are objective and must match exactly
+            after both parties independently fetch the same committed sources.
+            """
+            if not isinstance(items, list) or len(items) != len(expected_obligation_ids):
+                return None
+            findings = {}
+            for item in items:
+                if not isinstance(item, dict):
+                    return None
+                obligation_id = str(item.get("obligation_id", ""))
+                finding = item.get("finding")
+                reason = item.get("reason")
+                if obligation_id not in expected_obligation_ids or obligation_id in findings:
+                    return None
+                if finding not in ALLOWED_FINDINGS:
+                    return None
+                if not isinstance(reason, str) or len(reason) > 300:
+                    return None
+                findings[obligation_id] = finding
+            if set(findings) != set(expected_obligation_ids):
+                return None
+            return findings
+
         def leader_fetch() -> str:
             source_facts = self._delivery_source_facts(proof, repository_identity, commit_sha)
             if not source_facts.get("ok"):
@@ -1247,11 +1275,11 @@ Include exactly one finding for every expected obligation id.
                 independent = json.loads(normalize_proof(response, independent_llm, independent_source_facts))
                 if independent.get("overall_finding") != candidate.get("overall_finding"):
                     return False
-                candidate_obligations = candidate.get("obligations", [])
-                independent_obligations = independent.get("obligations", [])
-                if not isinstance(candidate_obligations, list) or not isinstance(independent_obligations, list):
+                candidate_findings = canonical_obligation_findings(candidate.get("obligations", []))
+                independent_findings = canonical_obligation_findings(independent.get("obligations", []))
+                if candidate_findings is None or independent_findings is None:
                     return False
-                if json.dumps(candidate_obligations, sort_keys=True) != json.dumps(independent_obligations, sort_keys=True):
+                if candidate_findings != independent_findings:
                     return False
                 return True
             except Exception:
@@ -1264,20 +1292,8 @@ Include exactly one finding for every expected obligation id.
         if result.get("overall_finding") not in ALLOWED_FINDINGS:
             raise gl.vm.UserError("delivery assessment returned an invalid finding")
         result_obligations = result.get("obligations")
-        if not isinstance(result_obligations, list) or len(result_obligations) != len(expected_obligation_ids):
-            raise gl.vm.UserError("delivery assessment must cover every obligation")
-        seen_obligations = set()
-        for item in result_obligations:
-            if not isinstance(item, dict):
-                raise gl.vm.UserError("delivery obligation finding is malformed")
-            obligation_id = str(item.get("obligation_id", ""))
-            if obligation_id not in expected_obligation_ids or obligation_id in seen_obligations:
-                raise gl.vm.UserError("delivery obligation identity is invalid")
-            if item.get("finding") not in ALLOWED_FINDINGS:
-                raise gl.vm.UserError("delivery obligation finding is invalid")
-            seen_obligations.add(obligation_id)
-        if seen_obligations != set(expected_obligation_ids):
-            raise gl.vm.UserError("delivery assessment omitted an obligation")
+        if canonical_obligation_findings(result_obligations) is None:
+            raise gl.vm.UserError("delivery assessment must contain bounded findings for every obligation")
         proof.content_hash = str(result["content_hash"])
         proof.source_facts_json = json.dumps(result.get("source_facts", {}), sort_keys=True)
         proof.assessment_json = json.dumps({

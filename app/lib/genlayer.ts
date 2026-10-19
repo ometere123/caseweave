@@ -28,8 +28,9 @@ export class GenLayerExecutionError extends Error {
     public readonly receipt: ReceiptLike,
     reason: string,
   ) {
+    const isConsensusFailure = reason.startsWith("consensus result");
     super(
-      `Transaction ${hash} was finalized but GenVM execution failed: ${reason}. ` +
+      `Transaction ${hash} was finalized but ${isConsensusFailure ? "the consensus result was unsuccessful" : "GenVM execution failed"}: ${reason}. ` +
         `Inspect ${getExplorerTxUrl(hash)}`,
     );
     this.name = "GenLayerExecutionError";
@@ -42,6 +43,15 @@ export function getExplorerTxUrl(hash: string): string {
 
 /** Return the SDK 1.1.8 execution error, or null for a successful result. */
 export function getExecutionError(receipt: ReceiptLike): string | null {
+  const resultName = receipt.resultName;
+  const result = receipt.result;
+  if (resultName && resultName !== "MAJORITY_AGREE") {
+    return `consensus result ${resultName}`;
+  }
+  if (typeof result === "number" && result !== 6) {
+    return `consensus result ${result}`;
+  }
+
   const leaderReceipt =
     receipt.consensus_data?.leader_receipt?.find(
       (item) => (item as LeaderReceiptLike & { mode?: string }).mode === "leader",

@@ -165,6 +165,23 @@ describe("verified GenLayer write results", () => {
       expect((error as Error).message).toContain(getExplorerTxUrl(hash));
     }
   });
+
+  it("rejects consensus disagreement even when the leader GenVM execution succeeded", () => {
+    const receipt = {
+      result: 7,
+      resultName: "MAJORITY_DISAGREE",
+      txExecutionResult: 1,
+      txExecutionResultName: "FINISHED_WITH_RETURN",
+      consensus_data: {
+        leader_receipt: [{ execution_result: "SUCCESS" }],
+      },
+    } as never;
+
+    expect(getExecutionError(receipt)).toContain("MAJORITY_DISAGREE");
+    expect(() => assertExecutionSucceeded("0xdisagree", receipt)).toThrow(
+      "consensus result was unsuccessful",
+    );
+  });
 });
 
 describe("authoritative agreement ID resolution", () => {
