@@ -44,7 +44,7 @@ agreement read match the submitted values.
 - Deployment transaction: <https://explorer-studio.genlayer.com/tx/0x99aa01c15af3d8fb9acc1deca9ce79339335f09df26b34b83ae14a983134d412>
 - Owner confirmed by `get_owner()`: `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7`
 - Contract source SHA-256: `8B0140180C121BD7414C3878462DBD04E39CCEB507E749C2E97A2B73A7E764E3`
-- Source commit: `8b95829`
+- Source commit: `8b958294da5678545ade7f9df478b707ad5562db`
 
 The deployment receipt reached `FINALIZED`, its result was majority agree, and
 the leader GenVM result was `SUCCESS`. The deployed schema contains the
@@ -110,7 +110,7 @@ verified and ready:
 - Deployment: <https://vercel.com/delealufejoel-4184s-projects/caseweave/HJadkTVa48pmnMqFEn8T1PzZvrt4>
 - Live alias: <https://caseweave.vercel.app>
 - Deployment ID: `dpl_HJadkTVa48pmnMqFEn8T1PzZvrt4`
-- Build source: `9527876`
+- Build source: `9527876ad40579be71daf3bc3b29fb37bfb4017e`
 - Live `/agreements/new` response: HTTP 200
 - Live client chunk: `/_next/static/chunks/0gqdo_07n01tk.js` contains the
   corrected contract address, strict address validation, and the compiled
