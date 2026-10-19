@@ -111,7 +111,7 @@ def test_structured_delivery_evidence_challenge_consensus_and_escrow(
     direct_alice,
 ):
     direct_vm.sender = direct_owner
-    court = direct_deploy("contracts/caseweave.py")
+    court = direct_deploy("contracts/caseweave.py", sdk_version="v0.2.16")
     from genlayer.py.types import Address
 
     owner = Address(bytes(direct_owner))
@@ -234,7 +234,7 @@ def test_delivery_source_commitment_and_validator_identity_fail_closed(
     direct_alice,
 ):
     direct_vm.sender = direct_owner
-    court = direct_deploy("contracts/caseweave.py")
+    court = direct_deploy("contracts/caseweave.py", sdk_version="v0.2.16")
     from genlayer.py.types import Address
 
     owner = Address(bytes(direct_owner))

@@ -177,7 +177,7 @@ def test_full_lifecycle_and_owner_authorization(
     charlie = direct_charlie
 
     direct_vm.sender = owner
-    court = direct_deploy("contracts/caseweave.py")
+    court = direct_deploy("contracts/caseweave.py", sdk_version="v0.2.16")
     # gltest creates fixture addresses as bytes before the SDK is loaded.
     # Convert them to the SDK's runtime Address class before invoking typed
     # contract parameters or comparing the stored address representation.
@@ -252,7 +252,7 @@ def test_create_agreement_rejects_zero_and_self_addresses(
     direct_bob,
 ):
     direct_vm.sender = direct_owner
-    court = direct_deploy("contracts/caseweave.py")
+    court = direct_deploy("contracts/caseweave.py", sdk_version="v0.2.16")
     from genlayer.py.types import Address
 
     owner = Address(bytes(direct_owner))
