@@ -380,6 +380,7 @@ class CaseWeaveCourt(gl.Contract):
     escrows: TreeMap[str, EscrowAccount]
     transfers: TreeMap[str, TransferRecord]
     judgment_settlement_transfers: TreeMap[str, str]
+    judgment_refund_transfers: TreeMap[str, str]
     policy_amendments: TreeMap[str, PolicyAmendment]
     dispute_proofs_json: TreeMap[str, str]
     dispute_procedure_json: TreeMap[str, str]
@@ -3070,8 +3071,13 @@ pretend that a final remedy was reached.
         judgment_id = self._latest_judgment_id(dispute_id)
         if not judgment_id or judgment_id not in self.judgments:
             raise gl.vm.UserError("no current judgment exists")
-        if judgment_id in self.judgment_settlement_transfers:
-            raise gl.vm.UserError("judgment settlement has already been created")
+        existing_transfer_id = self.judgment_settlement_transfers.get(judgment_id, "")
+        if existing_transfer_id:
+            existing_transfer = self.transfers[existing_transfer_id]
+            if existing_transfer.status in ("pending", "custodied"):
+                raise gl.vm.UserError("judgment settlement has already been created")
+            if existing_transfer.status not in ("failed", "reconciled"):
+                raise gl.vm.UserError("judgment settlement has an invalid transfer state")
         judgment = self.judgments[judgment_id]
         if judgment.status != "finalized" or judgment.appeal_status != "closed":
             raise gl.vm.UserError("settlement requires a final judgment after the appeal window")
@@ -3098,6 +3104,55 @@ pretend that a final remedy was reached.
         )
         self.judgment_settlement_transfers[judgment_id] = transfer_id
         return transfer_id
+
+    @gl.public.write
+    def refund_partial_settlement_remainder(self, dispute_id: str) -> str:
+        """Refund the committed balance left after a successful partial award."""
+        dispute = self.disputes[dispute_id]
+        agreement = self.agreements[dispute.agreement_id]
+        if gl.message.sender_address != agreement.creator:
+            raise gl.vm.UserError("only the agreement creator may refund a settlement remainder")
+        if dispute.status != "finalized":
+            raise gl.vm.UserError("settlement remainder requires a finalized dispute")
+        judgment_id = self._latest_judgment_id(dispute_id)
+        if not judgment_id or judgment_id not in self.judgments:
+            raise gl.vm.UserError("no current judgment exists")
+        judgment = self.judgments[judgment_id]
+        if judgment.status != "finalized" or judgment.appeal_status != "closed":
+            raise gl.vm.UserError("settlement remainder requires a final judgment after the appeal window")
+        settlement_id = self.judgment_settlement_transfers.get(judgment_id, "")
+        if not settlement_id or settlement_id not in self.transfers:
+            raise gl.vm.UserError("the partial settlement must be created first")
+        settlement = self.transfers[settlement_id]
+        if settlement.status != "custodied":
+            raise gl.vm.UserError("the partial settlement must reach trusted custody first")
+        remedy = json.loads(judgment.remedy_json or "{}")
+        canonical = self._canonical_remedy(remedy, judgment.outcome)
+        if canonical["action"] != "partial_release":
+            raise gl.vm.UserError("only a partial judgment has a refundable remainder")
+        existing_refund_id = self.judgment_refund_transfers.get(judgment_id, "")
+        if existing_refund_id:
+            existing_refund = self.transfers[existing_refund_id]
+            if existing_refund.status in ("pending", "custodied"):
+                raise gl.vm.UserError("settlement remainder refund has already been created")
+            if existing_refund.status not in ("failed", "reconciled"):
+                raise gl.vm.UserError("settlement remainder has an invalid transfer state")
+        escrow = self._ensure_escrow(dispute.agreement_id)
+        remainder = int(escrow.committed)
+        if remainder <= 0:
+            raise gl.vm.UserError("there is no committed settlement remainder to refund")
+        refund_id = self._create_protocol_transfer(
+            dispute.agreement_id,
+            dispute_id,
+            judgment_id,
+            "",
+            agreement.creator,
+            remainder,
+            "partial_settlement_remainder_refund",
+            "committed",
+        )
+        self.judgment_refund_transfers[judgment_id] = refund_id
+        return refund_id
 
     @gl.public.write
     def release_appeal_bond(self, appeal_id: str) -> str:

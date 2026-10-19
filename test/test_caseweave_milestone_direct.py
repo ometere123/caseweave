@@ -524,8 +524,25 @@ def test_partial_release_is_bounded_to_the_consensus_remedy(
         int(transfer["amount"]),
         transfer["proof_commitment"],
     )
+    direct_vm.sender = Address(bytes(direct_owner))
+    refund_id = court.refund_partial_settlement_remainder(dispute_id)
+    refund = court.get_transfer(refund_id)
+    assert refund["amount"] == 75
+    assert refund["recipient"] == Address(bytes(direct_owner)).as_hex
+    assert court.get_escrow(agreement_id)["committed"] == 0
+    direct_vm.sender = receiver_address
+    court.confirm_protocol_receipt(
+        refund_id,
+        receiver_address,
+        Address(bytes(direct_owner)),
+        int(refund["amount"]),
+        refund["proof_commitment"],
+    )
     with direct_vm.expect_revert("judgment settlement has already been created"):
         court.settle_judgment(dispute_id)
+    direct_vm.sender = Address(bytes(direct_owner))
+    with direct_vm.expect_revert("settlement remainder refund has already been created"):
+        court.refund_partial_settlement_remainder(dispute_id)
 
 
 def test_revision_required_cannot_create_a_full_settlement(

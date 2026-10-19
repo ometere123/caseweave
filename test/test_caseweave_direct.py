@@ -296,6 +296,22 @@ def test_full_lifecycle_and_owner_authorization(
             int(pending_before["amount"]),
             "f" * 64,
         )
+    with direct_vm.expect_revert("custody callback recipient mismatch"):
+        court.confirm_protocol_receipt(
+            second_transfer_id,
+            receiver_address,
+            bob,
+            int(pending_before["amount"]),
+            pending_before["proof_commitment"],
+        )
+    with direct_vm.expect_revert("transfer not found"):
+        court.confirm_protocol_receipt(
+            "TR_unrelated",
+            receiver_address,
+            alice,
+            int(pending_before["amount"]),
+            pending_before["proof_commitment"],
+        )
     returned_bond = court.confirm_protocol_receipt(
         second_transfer_id,
         receiver_address,
