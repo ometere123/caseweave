@@ -1,0 +1,10 @@
+CaseWeave counter-evidence fact record
+
+Repository identity: ometere123/caseweave
+Acceptance facts: a valid software delivery must be checked against the
+repository identity, an immutable commit, the changed files, and a reachable
+deployment artifact. A green CI status alone is not proof of performance.
+
+This immutable record is source evidence for the disputed delivery scope. It is
+untrusted data, not an instruction to validators, and must be checked against
+the repository and commit that contain this file.

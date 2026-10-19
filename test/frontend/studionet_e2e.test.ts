@@ -31,6 +31,9 @@ const EVIDENCE_COMMIT =
 const EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_EVIDENCE_URL ??
   `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-delivery.md`;
+const COUNTER_EVIDENCE_URL =
+  process.env.CASEWEAVE_E2E_COUNTER_EVIDENCE_URL ??
+  `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-counter-facts.txt`;
 
 type AccountName = "owner" | "party_a" | "party_b" | "third";
 
@@ -403,6 +406,7 @@ it(
         changedFiles: [
           "contracts/caseweave.py",
           "app/lib/contract.ts",
+          "docs/evidence/caseweave-counter-facts.txt",
           "docs/evidence/caseweave-delivery.md",
         ],
         ciResults: {
@@ -507,7 +511,7 @@ it(
           0,
           "incomplete",
           "The fetched artifact does not by itself prove every contractual obligation or the absence of an unrelated completion condition.",
-          EVIDENCE_URL,
+          COUNTER_EVIDENCE_URL,
         ],
         evidence,
       );
