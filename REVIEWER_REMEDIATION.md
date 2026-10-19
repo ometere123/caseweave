@@ -121,7 +121,7 @@ milestone deployment in the section below:
 
 No private keys, keystores, or credentials are stored in the repository.
 
-## Resubmission response
+## Historical resubmission response (superseded)
 
 > CaseWeave has been remediated and redeployed to StudioNet (chain 61999).
 > The creation path now constructs a runtime `CalldataAddress`, and tests
@@ -157,3 +157,17 @@ unauthorized rejection, appellate result, transfer reconciliation, and
 reviewer walkthrough are in [DEPLOYMENT.md](DEPLOYMENT.md),
 [MILESTONE_REVIEW_EVIDENCE.md](MILESTONE_REVIEW_EVIDENCE.md), and
 [TEST_EVIDENCE.md](TEST_EVIDENCE.md).
+
+## Current reviewer resubmission response
+
+> CaseWeave’s Autonomous Contract Justice milestone is complete on StudioNet
+> chain 61999. Runtime CalldataAddress conversion is tested and live in the
+> creation flow. Evidence, proof-of-performance, precedent, and appellate
+> outcomes are independently validated and fail closed; the old resolve_appeal
+> path cannot choose merits, while request_appeal_review requires substantive
+> validator consensus. Final court: 0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a;
+> consumer: 0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71. A real run created AGR_6,
+> DIS_5, CASE_3, APP_3 and JDG_6, rejected an unrelated resolver with unchanged
+> state, reconciled funded GEN transfers, and consumed the finalized judgment.
+> Full receipts, hashes, state reads and production verification are in the
+> linked evidence report.
