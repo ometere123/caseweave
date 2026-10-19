@@ -23,11 +23,11 @@ import { resolveCreatedAgreementId } from "../../app/lib/create-agreement";
 
 const CONTRACT_ADDRESS =
   process.env.CASEWEAVE_E2E_CONTRACT_ADDRESS ??
-  "0x8a248BA03c31a6EE084a92B21cc4f323F8d04bE7";
+  "0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a";
 const CONSUMER_ADDRESS = process.env.CASEWEAVE_E2E_CONSUMER_ADDRESS;
 const EVIDENCE_COMMIT =
   process.env.CASEWEAVE_E2E_COMMIT_SHA ??
-  "bdb60f27f4af765c670881fb58afeb7873d071e8";
+  "b528a8ed178b417e718116935d30808e54392761";
 const EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_EVIDENCE_URL ??
   `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/README.md`;

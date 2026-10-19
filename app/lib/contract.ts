@@ -3,7 +3,7 @@ import { assertDistinctCounterparty } from "./address";
 
 export const CASEWEAVE_CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS ??
-    "0x8a248BA03c31a6EE084a92B21cc4f323F8d04bE7") as `0x${string}`;
+    "0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a") as `0x${string}`;
 
 export const CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS ??
