@@ -27,7 +27,7 @@ const CONTRACT_ADDRESS =
 const CONSUMER_ADDRESS = process.env.CASEWEAVE_E2E_CONSUMER_ADDRESS;
 const EVIDENCE_COMMIT =
   process.env.CASEWEAVE_E2E_COMMIT_SHA ??
-  "b528a8ed178b417e718116935d30808e54392761";
+  "b7c99e4c97cf9be1005de7cee509bde56efc0cd3";
 const EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_EVIDENCE_URL ??
   `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-delivery.md`;
