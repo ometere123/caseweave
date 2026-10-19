@@ -976,33 +976,47 @@ class CaseWeaveCourt(gl.Contract):
         bounded, canonical fact set before consensus evaluates obligations.
         Retrieved content remains untrusted data, never instructions.
         """
-        commit_url = f"https://api.github.com/repos/{repository_identity}/commits/{commit_sha}"
+        # GitHub's commit REST response is not bounded for large commits and
+        # is intermittently unavailable from the validator egress path. The
+        # immutable Atom commit feed is source-specific, small, and includes
+        # the repository path and exact commit SHA. Changed files are checked
+        # independently through raw commit-pinned HEAD requests below; the
+        # fetched bytes remain untrusted data.
+        commit_url = f"https://github.com/{repository_identity}/commits/{commit_sha}.atom"
         commit_response = gl.nondet.web.request(commit_url, method="GET")
         if int(commit_response.status) != 200 or len(commit_response.body) > MAX_SOURCE_RESPONSE_BYTES:
-            return {"ok": False, "reason": "authoritative GitHub commit endpoint unavailable"}
-        try:
-            commit_data = json.loads(commit_response.body.decode("utf-8", errors="replace"))
-        except Exception:
-            return {"ok": False, "reason": "authoritative GitHub commit response was not JSON"}
-        returned_sha = str(commit_data.get("sha", ""))
-        html_url = str(commit_data.get("html_url", ""))
-        expected_html_prefix = f"https://github.com/{repository_identity}/commit/"
-        if returned_sha.lower() != commit_sha.lower() or not html_url.startswith(expected_html_prefix):
+            return {"ok": False, "reason": "authoritative GitHub commit feed unavailable"}
+        commit_feed = commit_response.body.decode("utf-8", errors="replace")
+        if (
+            f"Grit::Commit/{commit_sha}" not in commit_feed
+            or f"/{repository_identity}/commit/{commit_sha}" not in commit_feed
+        ):
             return {"ok": False, "reason": "GitHub commit identity did not match the commitment"}
 
-        authoritative_files = sorted(
-            str(item.get("filename", ""))
-            for item in commit_data.get("files", [])
-            if isinstance(item, dict) and item.get("filename")
-        )
         try:
             submitted_files = json.loads(proof.changed_files_json)
         except Exception:
             submitted_files = []
-        if not isinstance(submitted_files, list):
+        if not isinstance(submitted_files, list) or not submitted_files:
             return {"ok": False, "reason": "changed-file metadata was not an array"}
-        if any(str(path) not in authoritative_files for path in submitted_files):
-            return {"ok": False, "reason": "submitted changed files were not present in the committed revision"}
+
+        authoritative_files = []
+        for path_value in submitted_files[:MAX_DELIVERABLES]:
+            path = str(path_value)
+            if (
+                not path
+                or path.startswith("/")
+                or ".." in path
+                or "?" in path
+                or "#" in path
+            ):
+                return {"ok": False, "reason": "changed-file path contained unsafe syntax"}
+            file_url = f"https://raw.githubusercontent.com/{repository_identity}/{commit_sha}/{path}"
+            file_response = gl.nondet.web.request(file_url, method="HEAD")
+            if int(file_response.status) != 200:
+                return {"ok": False, "reason": "a submitted changed file was not present at the committed revision"}
+            authoritative_files.append(path)
+        authoritative_files = sorted(set(authoritative_files))
 
         facts = {
             "ok": True,
@@ -1011,9 +1025,9 @@ class CaseWeaveCourt(gl.Contract):
             "commit": {
                 "url": commit_url,
                 "http_status": int(commit_response.status),
-                "returned_sha": returned_sha,
-                "html_url": html_url,
-                "changed_files": authoritative_files[:MAX_DELIVERABLES],
+                "returned_sha": commit_sha,
+                "html_url": f"https://github.com/{repository_identity}/commit/{commit_sha}",
+                "changed_files": authoritative_files,
             },
             "pull_request": {"status": "not_submitted"},
             "ci": {"status": "not_submitted"},

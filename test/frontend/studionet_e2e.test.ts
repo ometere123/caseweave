@@ -23,7 +23,7 @@ import { resolveCreatedAgreementId } from "../../app/lib/create-agreement";
 
 const CONTRACT_ADDRESS =
   process.env.CASEWEAVE_E2E_CONTRACT_ADDRESS ??
-  "0x7199dd3f094053a6D6255fe7C3fb58ab130722a2";
+  "0x8a248BA03c31a6EE084a92B21cc4f323F8d04bE7";
 const CONSUMER_ADDRESS = process.env.CASEWEAVE_E2E_CONSUMER_ADDRESS;
 const EVIDENCE_COMMIT =
   process.env.CASEWEAVE_E2E_COMMIT_SHA ??

@@ -10,12 +10,9 @@ COMMIT = "ff4df65945c068d0d3690aea8f2b256abcbbd290"
 REPOSITORY = "https://github.com/ometere123/caseweave"
 EVIDENCE_URL = f"https://raw.githubusercontent.com/ometere123/caseweave/{COMMIT}/README.md"
 BODY = b"CaseWeave milestone evidence: the committed delivery includes the agreed README change."
-COMMIT_RESPONSE = json.dumps(
-    {
-        "sha": COMMIT,
-        "html_url": f"https://github.com/ometere123/caseweave/commit/{COMMIT}",
-        "files": [{"filename": "README.md"}],
-    }
+COMMIT_FEED = (
+    f"<id>tag:github.com,2008:Grit::Commit/{COMMIT}</id>"
+    f"<link href=\"https://github.com/ometere123/caseweave/commit/{COMMIT}\"/>"
 ).encode()
 
 VERIFIED = "```json\n" + json.dumps(
@@ -150,8 +147,18 @@ def test_structured_delivery_evidence_challenge_consensus_and_escrow(
         json.dumps(["https://caseweave.vercel.app"]),
         EVIDENCE_URL,
     )
-    direct_vm.mock_web(r"raw\.githubusercontent\.com/ometere123/caseweave/" + COMMIT, {"status": 200, "body": BODY})
-    direct_vm.mock_web(r"api\.github\.com/repos/ometere123/caseweave/commits/" + COMMIT, {"status": 200, "body": COMMIT_RESPONSE})
+    direct_vm.mock_web(
+        r"github\.com/ometere123/caseweave/commits/" + COMMIT + r"\.atom",
+        {"method": "GET", "status": 200, "body": COMMIT_FEED},
+    )
+    direct_vm.mock_web(
+        r"raw\.githubusercontent\.com/ometere123/caseweave/" + COMMIT + r"/README\.md$",
+        {"method": "HEAD", "status": 200, "body": b""},
+    )
+    direct_vm.mock_web(
+        r"raw\.githubusercontent\.com/ometere123/caseweave/" + COMMIT + r"/README\.md$",
+        {"method": "GET", "status": 200, "body": BODY},
+    )
     direct_vm.mock_web(r"caseweave\.vercel\.app", {"status": 200, "body": b"deployment"})
     direct_vm.mock_llm(r"software-delivery proof", PROOF_ASSESSMENT)
     proof = court.verify_delivery_proof(proof_id)
@@ -269,13 +276,23 @@ def test_delivery_source_commitment_and_validator_identity_fail_closed(
         "ometere123/caseweave",
         COMMIT,
         "{}",
-        "[]",
+        json.dumps(["README.md"]),
         "{}",
         "[]",
         EVIDENCE_URL,
     )
-    direct_vm.mock_web(r"raw\.githubusercontent\.com/ometere123/caseweave/" + COMMIT, {"status": 200, "body": BODY})
-    direct_vm.mock_web(r"api\.github\.com/repos/ometere123/caseweave/commits/" + COMMIT, {"status": 200, "body": COMMIT_RESPONSE})
+    direct_vm.mock_web(
+        r"github\.com/ometere123/caseweave/commits/" + COMMIT + r"\.atom",
+        {"method": "GET", "status": 200, "body": COMMIT_FEED},
+    )
+    direct_vm.mock_web(
+        r"raw\.githubusercontent\.com/ometere123/caseweave/" + COMMIT + r"/README\.md$",
+        {"method": "HEAD", "status": 200, "body": b""},
+    )
+    direct_vm.mock_web(
+        r"raw\.githubusercontent\.com/ometere123/caseweave/" + COMMIT + r"/README\.md$",
+        {"method": "GET", "status": 200, "body": BODY},
+    )
     direct_vm.mock_llm(r"software-delivery proof", PROOF_ASSESSMENT)
     court.verify_delivery_proof(proof_id)
     validators_before = len(direct_vm._captured_validators)
