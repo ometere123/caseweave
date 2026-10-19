@@ -182,6 +182,20 @@ describe("verified GenLayer write results", () => {
       "consensus result was unsuccessful",
     );
   });
+
+  it("accepts a finalized native child transfer only when value was credited", () => {
+    const credited = {
+      statusName: "FINALIZED",
+      result: 5,
+      result_name: "NO_MAJORITY",
+      consensus_data: null,
+      value_credited: true,
+    } as never;
+    expect(getExecutionError(credited)).toBeNull();
+
+    const notCredited = { ...credited, value_credited: false } as never;
+    expect(getExecutionError(notCredited)).toContain("value transfer");
+  });
 });
 
 describe("authoritative agreement ID resolution", () => {

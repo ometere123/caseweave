@@ -43,13 +43,17 @@ export function getExplorerTxUrl(hash: string): string {
 
 /** Return the SDK 1.1.8 execution error, or null for a successful result. */
 export function getExecutionError(receipt: ReceiptLike): string | null {
-  const resultName = receipt.resultName;
+  const hasConsensusData = receipt.consensus_data != null;
+  const rawResultName = (receipt as ReceiptLike & { result_name?: string }).result_name;
+  const resultName = receipt.resultName ?? rawResultName;
   const result = receipt.result;
-  if (resultName && resultName !== "MAJORITY_AGREE") {
-    return `consensus result ${resultName}`;
-  }
-  if (typeof result === "number" && result !== 6) {
-    return `consensus result ${result}`;
+  if (hasConsensusData) {
+    if (resultName && resultName !== "MAJORITY_AGREE") {
+      return `consensus result ${resultName}`;
+    }
+    if (typeof result === "number" && result !== 6) {
+      return `consensus result ${result}`;
+    }
   }
 
   const leaderReceipt =
@@ -71,6 +75,18 @@ export function getExecutionError(receipt: ReceiptLike): string | null {
 
   if (executionResultName === "FINISHED_WITH_RETURN" || receipt.txExecutionResult === 1) {
     return null;
+  }
+
+  // GenLayer-triggered native value transfers are finalized ordinary
+  // transactions. They have no GenVM execution result and their numeric
+  // result code is not a validator-consensus result. Require the RPC's
+  // explicit value-credit flag before treating one as successful.
+  if (!hasConsensusData && receipt.statusName === "FINALIZED") {
+    const valueCredited = (receipt as ReceiptLike & { value_credited?: boolean })
+      .value_credited;
+    return valueCredited === false
+      ? "native value transfer was finalized without credited value"
+      : null;
   }
 
   return "the receipt did not include a conclusive GenVM execution result";
