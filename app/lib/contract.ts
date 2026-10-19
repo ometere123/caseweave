@@ -1,6 +1,9 @@
+import type { CalldataEncodable } from "genlayer-js/types";
+import { assertDistinctCounterparty } from "./address";
+
 export const CASEWEAVE_CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS ??
-    "0x322b999682CdDecE9b7e704541F86dC86D18D35a") as `0x${string}`;
+    "0x99be950790dEec2F474e5F6E55845eF75D8872a0") as `0x${string}`;
 
 export const EVIDENCE_STATUSES = [
   "unverified",
@@ -57,6 +60,32 @@ export const ALLOWED_APPEAL_GROUNDS = [
   "bad_faith_evidence",
   "outcome_inconsistent_with_holding",
 ] as const;
+
+export type CreateAgreementInput = {
+  creator: string;
+  title: string;
+  agreementText: string;
+  counterparty: string;
+  agreementType: string;
+  tags: string[];
+  stakeAmount: number;
+  precedentPolicy: string;
+};
+
+/** Build the exact calldata argument list used by the creation form. */
+export function buildCreateAgreementArgs(
+  input: CreateAgreementInput,
+): CalldataEncodable[] {
+  return [
+    input.title,
+    input.agreementText,
+    assertDistinctCounterparty(input.counterparty, input.creator),
+    input.agreementType,
+    input.tags,
+    input.stakeAmount,
+    input.precedentPolicy,
+  ];
+}
 
 export type Agreement = {
   agreement_id: string;

@@ -1,7 +1,13 @@
 {
   "name": "genlayer-project",
   "type": "module",
+  "scripts": {
+    "test:frontend": "vitest run test/frontend/caseweave.test.ts",
+    "test:studionet": "vitest run test/frontend/studionet_e2e.test.ts"
+  },
   "devDependencies": {
-    "genlayer-js": "^1.1.8"
+    "genlayer": "0.39.1",
+    "genlayer-js": "1.1.8",
+    "vitest": "3.2.7"
   }
 }

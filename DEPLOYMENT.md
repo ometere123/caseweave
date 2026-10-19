@@ -5,18 +5,26 @@
 - **Network**: GenLayer Studio Network (studionet)
 - **Chain ID**: 61999
 - **RPC**: https://studio.genlayer.com/api
-- **Explorer**: https://genlayer-explorer.vercel.app
+- **Explorer**: https://explorer-studio.genlayer.com
 
 ## Deployed Contract
 
 - **Contract**: `CaseWeaveCourt`
-- **Address**: `0x322b999682CdDecE9b7e704541F86dC86D18D35a`
+- **Address**: `0x99be950790dEec2F474e5F6E55845eF75D8872a0`
+- **Deployment transaction**: [0x99aa01c15af3d8fb9acc1deca9ce79339335f09df26b34b83ae14a983134d412](https://explorer-studio.genlayer.com/tx/0x99aa01c15af3d8fb9acc1deca9ce79339335f09df26b34b83ae14a983134d412)
+- **Owner**: `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7`
+- **Contract source SHA-256**: `8B0140180C121BD7414C3878462DBD04E39CCEB507E749C2E97A2B73A7E764E3`
 - **Source**: [contracts/caseweave.py](contracts/caseweave.py)
+
+The owner is an explicitly trusted app-level administrative resolver for
+appeals. `resolve_appeal` is not a fresh validator-consensus judgment: the
+owner submits the administrative result on-chain, while the initial dispute
+verdict remains consensus-created. There is no owner-transfer method.
 
 Redeploy with:
 
 ```bash
-genlayer deploy --contract contracts/caseweave.py
+node_modules/.bin/genlayer.cmd deploy --contract contracts/caseweave.py
 ```
 
 Then update `CASEWEAVE_CONTRACT_ADDRESS` in [app/lib/contract.ts](app/lib/contract.ts).
@@ -32,6 +40,9 @@ fresh deploy and re-running the demo data.
   prompt as text, never actually fetched.
 - `0xec393236E39578d19081687f2F27d801212f8194` - v1, first working deploy;
   `created_at`/`updated_at`/etc. are all placeholder zeros.
+- `0x322b999682CdDecE9b7e704541F86dC86D18D35a` - superseded remediation
+  target; the old frontend passed counterparty strings and appeal resolution
+  was not owner-authorized.
 
 Kept here for reference only; the frontend no longer points at either.
 
@@ -101,16 +112,29 @@ Unlock: `genlayer account unlock --account <name> --password <password>`
 
 ## Verified real-data run (current deployment)
 
-`AGR_1` (evidence test bounty) → `DIS_1` (builder disputes claim of a
-missing README) → three evidence URLs submitted: one real, commit-pinned
-GitHub raw file; one `http://localhost:9999/fake` (correctly rejected as
-`invalid_url` before any fetch); one nonexistent domain. The real URL was
-verified: validators fetched it, agreed on HTTP 200 and one SHA-256 hash,
-and produced a matching evidence summary and quote. `request_verdict` then
-ran only because that verified item existed, correctly weighing it over the
-claimant's own unverified/invalid links → verdict `no_breach`, 95%
-confidence, explicitly citing the verified evidence as contradicting the
-claimant's claim → finalized as `CASE_1`.
+The following run used the corrected frontend calldata builder and two party
+accounts, plus a third unrelated wallet for the authorization rejection. Every
+listed transaction reached `FINALIZED`; the GenVM execution result was
+`SUCCESS` except the expected unauthorized rejection, which reached
+`FINALIZED` with GenVM `ERROR` and left state unchanged.
+
+| Step | Object/state | Transaction |
+|---|---|---|
+| Create typed-address agreement | `AGR_1`; creator `0xac3AC69dC0Bde389256dD6748C75817ead9286D9`, counterparty `0xA7EeAE0E93793e3146Cb14b0700251B8b0EBADFB` | [0x952a9b26e9b7e4bca4355e417c59a83a2dd432acb372f5a4217bd9bbeb07edc6](https://explorer-studio.genlayer.com/tx/0x952a9b26e9b7e4bca4355e417c59a83a2dd432acb372f5a4217bd9bbeb07edc6) |
+| Accept | `AGR_1: pending_acceptance -> active` | [0x82229107931dd9088ae017c69070011a9e794fbfd24e9b430ce040544c65c31a](https://explorer-studio.genlayer.com/tx/0x82229107931dd9088ae017c69070011a9e794fbfd24e9b430ce040544c65c31a) |
+| File dispute | `DIS_1: awaiting_response` | [0x652ab929491d5d6450bdbbe6eccd4efb2369bab9430de8d640d920b0be0bf09e](https://explorer-studio.genlayer.com/tx/0x652ab929491d5d6450bdbbe6eccd4efb2369bab9430de8d640d920b0be0bf09e) |
+| Respond | `DIS_1: awaiting_response -> awaiting_precedent_search` | [0x867c46d563d38488e9ce3f402104d3bd00275a1685db658ab8c3c7e6bb73c428](https://explorer-studio.genlayer.com/tx/0x867c46d563d38488e9ce3f402104d3bd00275a1685db658ab8c3c7e6bb73c428) |
+| Verify evidence | `verified`, HTTP 200, SHA-256 `c51f97ba5175f0a4b975f08e67833d8d4e377b60b100e120ed1d6236c399a6fc` | [0xda9e21daffed42a8be5ef5e87f49eed007bca000967be9af028eb2e75b49c9da](https://explorer-studio.genlayer.com/tx/0xda9e21daffed42a8be5ef5e87f49eed007bca000967be9af028eb2e75b49c9da) |
+| Precedent search | `DIS_1: awaiting_verdict` | [0x37a289da16f695ef30ff06bd3bc4b0f6fc438dc76532bfe416210ba5eb76a50f](https://explorer-studio.genlayer.com/tx/0x37a289da16f695ef30ff06bd3bc4b0f6fc438dc76532bfe416210ba5eb76a50f) |
+| AI-consensus verdict | `revision_required`, confidence 74; `DIS_1: verdict_reached` | [0x821459b52f9822faa0e830b036cddf223101dd73a41bddc6f8a0c3881b55d446](https://explorer-studio.genlayer.com/tx/0x821459b52f9822faa0e830b036cddf223101dd73a41bddc6f8a0c3881b55d446) |
+| Finalize | `CASE_1`; `DIS_1: finalized` | [0x21b183d9d4badaf5a1c7728efceb58d28dfe0a3dd9be2c5d2f1e291c60aaf4b6](https://explorer-studio.genlayer.com/tx/0x21b183d9d4badaf5a1c7728efceb58d28dfe0a3dd9be2c5d2f1e291c60aaf4b6) |
+| File appeal | `APP_1: under_review`; `DIS_1: under_appeal` | [0x4f365ba23ede9d4127b0160fe4dc07cd700ce753676b90c062659b1bd1bba35c](https://explorer-studio.genlayer.com/tx/0x4f365ba23ede9d4127b0160fe4dc07cd700ce753676b90c062659b1bd1bba35c) |
+| Unauthorized resolver | Third wallet rejected with `only the owner may resolve appeals`; `APP_1`, `DIS_1`, and `CASE_1` unchanged | [0xf3420dee8c597fe72012c8aca02612955bf555a7248593f18247dada50347c10](https://explorer-studio.genlayer.com/tx/0xf3420dee8c597fe72012c8aca02612955bf555a7248593f18247dada50347c10) |
+| Owner resolution | `APP_1: resolved`, result `overturned_precedent`; `CASE_1: overturned` | [0x687616edced6a55483960167c695c891d17fc3ec14bb7a385876ba78c7ab2fff](https://explorer-studio.genlayer.com/tx/0x687616edced6a55483960167c695c891d17fc3ec14bb7a385876ba78c7ab2fff) |
+
+Evidence URL: `https://raw.githubusercontent.com/ometere123/caseweave/3916d4a/README.md`.
+The final on-chain reads confirmed `AGR_1`, `DIS_1`, `CASE_1`, and `APP_1`
+and the owner address shown above.
 
 ## Reproduce the demo flow
 
@@ -139,6 +163,9 @@ counterparty.
 12. Finalize precedent. Expected dispute status: `finalized`; expected
     agreement status: `resolved`; expected result: a new `CASE_n` visible in
     `/cases` and the case detail page.
+13. File an appeal from a finalized dispute. Only the deployment owner may
+    resolve it; the owner action is administrative and does not claim fresh
+    validator consensus.
 
 If evidence verification returns `unstable`, retry with a more stable source.
 Dynamic pages, redirects, or pages that personalize responses can produce

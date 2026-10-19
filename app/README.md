@@ -21,7 +21,7 @@ Copy the root `.env.example` values into `app/.env.local` if you need to point
 the frontend at a different deployment.
 
 ```bash
-NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS=0x322b999682CdDecE9b7e704541F86dC86D18D35a
+NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS=0x99be950790dEec2F474e5F6E55845eF75D8872a0
 NEXT_PUBLIC_STUDIONET_CHAIN_ID=61999
 ```
 

@@ -201,12 +201,13 @@ inside the contract before being written to state.
 | Network    | GenLayer Studionet                                                 |
 | Chain ID   | 61999                                                               |
 | RPC        | https://studio.genlayer.com/api                                    |
-| Explorer   | https://genlayer-explorer.vercel.app                                |
-| Contract   | `0x322b999682CdDecE9b7e704541F86dC86D18D35a`                        |
+| Explorer   | https://explorer-studio.genlayer.com                            |
+| Contract   | `0x99be950790dEec2F474e5F6E55845eF75D8872a0`                    |
 | Source     | [contracts/caseweave.py](contracts/caseweave.py)                    |
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for redeploy instructions and the local
-test accounts used to run the reference dispute end-to-end.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the verified deployment, owner role,
+transaction evidence, redeploy instructions, and the local test accounts used
+to run the reference dispute end-to-end.
 
 For the iteration record, see [PROJECT_HISTORY.md](PROJECT_HISTORY.md).
 
@@ -256,7 +257,7 @@ etc.) - the app will prompt it to add GenLayer Studionet automatically.
 To redeploy the contract:
 
 ```bash
-genlayer deploy --contract contracts/caseweave.py
+node_modules/.bin/genlayer.cmd deploy --contract contracts/caseweave.py
 ```
 
 Then update `CASEWEAVE_CONTRACT_ADDRESS` in

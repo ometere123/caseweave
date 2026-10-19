@@ -2,24 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { writeContract } from "../../../lib/genlayer";
+import {
+  GenLayerExecutionError,
+  getExplorerTxUrl,
+  readContract,
+  writeContract,
+} from "../../../lib/genlayer";
+import { resolveCreatedAgreementId } from "../../../lib/create-agreement";
 import { useWallet } from "../../../store/useWallet";
 import {
   ALLOWED_AGREEMENT_TYPES,
   ALLOWED_PRECEDENT_POLICIES,
+  buildCreateAgreementArgs,
+  type Agreement,
 } from "../../../lib/contract";
-
-type CreateAgreementReceipt = {
-  consensus_data?: {
-    leader_receipt?: {
-      result?: {
-        payload?: {
-          readable?: string;
-        };
-      };
-    }[];
-  };
-};
 
 export default function CreateAgreementPage() {
   const router = useRouter();
@@ -38,10 +34,12 @@ export default function CreateAgreementPage() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorHash, setErrorHash] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setErrorHash(null);
 
     if (!address) {
       await connect();
@@ -55,23 +53,45 @@ export default function CreateAgreementPage() {
         .map((t) => t.trim())
         .filter(Boolean);
 
-      const { receipt } = await writeContract(address, "create_agreement", [
+      const args = buildCreateAgreementArgs({
+        creator: address,
         title,
         agreementText,
         counterparty,
         agreementType,
-        tagList,
-        Number(stakeAmount) || 0,
+        tags: tagList,
+        stakeAmount: Number(stakeAmount) || 0,
         precedentPolicy,
-      ]);
+      });
+      const { hash, receipt } = await writeContract(
+        address,
+        "create_agreement",
+        args,
+      );
 
-      const leaderResult = (receipt as CreateAgreementReceipt)?.consensus_data
-        ?.leader_receipt?.[0]?.result;
-      const agreementId: string | null =
-        leaderResult?.payload?.readable?.replace(/"/g, "") ?? null;
-
-      router.push(agreementId ? `/agreements/${agreementId}` : "/agreements");
+      const agreementId = await resolveCreatedAgreementId({
+        hash,
+        receipt,
+        expected: {
+          creator: address,
+          counterparty,
+          title,
+          agreementText,
+          agreementType,
+          tags: tagList,
+          stakeAmount: Number(stakeAmount) || 0,
+          precedentPolicy,
+        },
+        readAgreement: async (agreementId) =>
+          (await readContract("get_agreement", [agreementId])) as Agreement,
+        listAgreements: async () =>
+          (await readContract("list_agreements")) as Record<string, Agreement>,
+      });
+      router.push(`/agreements/${agreementId}`);
     } catch (err) {
+      if (err instanceof GenLayerExecutionError) {
+        setErrorHash(err.hash);
+      }
       setError(err instanceof Error ? err.message : "Failed to create agreement");
     } finally {
       setSubmitting(false);
@@ -169,7 +189,21 @@ export default function CreateAgreementPage() {
           />
         </Field>
 
-        {error && <p className="text-dispute text-sm">{error}</p>}
+        {error && (
+          <div className="text-dispute text-sm" role="alert" aria-live="polite">
+            <p>{error}</p>
+            {errorHash && (
+              <a
+                href={getExplorerTxUrl(errorHash)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-citation underline"
+              >
+                View transaction {errorHash}
+              </a>
+            )}
+          </div>
+        )}
 
         <button
           type="submit"

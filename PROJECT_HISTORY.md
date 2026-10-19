@@ -39,7 +39,7 @@ Superseded deployment:
   failed evidence differently.
 
 Current deployment:
-`0x322b999682CdDecE9b7e704541F86dC86D18D35a`.
+`0x99be950790dEec2F474e5F6E55845eF75D8872a0`.
 
 ## Frontend Iterations
 

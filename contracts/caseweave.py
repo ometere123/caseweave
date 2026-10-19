@@ -156,6 +156,10 @@ class CaseWeaveCourt(gl.Contract):
     case_counter: u256
     appeal_counter: u256
     evidence_counter: u256
+    # Trusted administrative resolver for appeals. This is deliberately not
+    # user-controlled: appeal outcomes are app-level administrative actions,
+    # not fresh validator-consensus judgments.
+    owner: Address
 
     def __init__(self):
         self.agreement_counter = u256(0)
@@ -163,6 +167,7 @@ class CaseWeaveCourt(gl.Contract):
         self.case_counter = u256(0)
         self.appeal_counter = u256(0)
         self.evidence_counter = u256(0)
+        self.owner = gl.message.sender_address
 
     # ------------------------------------------------------------------
     # Agreements
@@ -186,6 +191,8 @@ class CaseWeaveCourt(gl.Contract):
             raise Exception("agreement_text must not be empty")
         if counterparty_addr == sender:
             raise Exception("parties must not be the same address")
+        if counterparty_addr.as_hex.lower() == "0x" + ("0" * 40):
+            raise Exception("counterparty must not be the zero address")
         if agreement_type not in ALLOWED_AGREEMENT_TYPES:
             raise Exception("invalid agreement_type")
         if precedent_policy not in ALLOWED_PRECEDENT_POLICIES:
@@ -812,29 +819,47 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
 
     @gl.public.write
     def resolve_appeal(self, appeal_id: str, result: str) -> None:
+        if gl.message.sender_address != self.owner:
+            raise Exception("only the owner may resolve appeals")
+        if appeal_id not in self.appeals:
+            raise Exception("appeal not found")
+
         appeal = self.appeals[appeal_id]
         if appeal.status != "under_review":
             raise Exception("appeal already resolved")
         if result not in ALLOWED_APPEAL_RESULTS:
             raise Exception("invalid appeal result")
 
+        if appeal.dispute_id not in self.disputes:
+            raise Exception("appeal dispute not found")
+        dispute = self.disputes[appeal.dispute_id]
+        if dispute.status != "under_appeal":
+            raise Exception("appeal is not awaiting resolution")
+        if not dispute.final_case_id or dispute.final_case_id not in self.precedents:
+            raise Exception("appeal requires an existing finalized precedent")
+
+        case = self.precedents[dispute.final_case_id]
+        if case.dispute_id != dispute.dispute_id:
+            raise Exception("appeal precedent does not belong to the dispute")
+
         appeal.result = result
         appeal.status = "resolved"
         appeal.resolved_at = gl.message_raw["datetime"]
 
-        dispute = self.disputes[appeal.dispute_id]
         dispute.status = "finalized"
 
-        if dispute.final_case_id and dispute.final_case_id in self.precedents:
-            case = self.precedents[dispute.final_case_id]
-            if result == "weakened_precedent" and case.status == "active":
-                case.status = "weakened"
-            if result == "overturned_precedent":
-                case.status = "overturned"
+        if result == "weakened_precedent" and case.status == "active":
+            case.status = "weakened"
+        if result == "overturned_precedent":
+            case.status = "overturned"
 
     # ------------------------------------------------------------------
     # Views
     # ------------------------------------------------------------------
+
+    @gl.public.view
+    def get_owner(self) -> str:
+        return self.owner.as_hex
 
     def _agreement_to_dict(self, agreement: Agreement) -> dict:
         return {
