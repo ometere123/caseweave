@@ -23,17 +23,25 @@ import { resolveCreatedAgreementId } from "../../app/lib/create-agreement";
 
 const CONTRACT_ADDRESS =
   process.env.CASEWEAVE_E2E_CONTRACT_ADDRESS ??
-  "0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a";
-const CONSUMER_ADDRESS = process.env.CASEWEAVE_E2E_CONSUMER_ADDRESS;
+  "0x36b5007c35817Bb39026D7C9916D99b363858B7d";
+const RECEIVER_ADDRESS =
+  process.env.CASEWEAVE_E2E_RECEIVER_ADDRESS ??
+  "0x56bCE3A36FCd1b9B6a259213A99f2243992a8351";
+const CONSUMER_ADDRESS =
+  process.env.CASEWEAVE_E2E_CONSUMER_ADDRESS ??
+  "0xA96bE7dAbEb4c3015c10beD30cB4e01e3A9f248d";
 const EVIDENCE_COMMIT =
   process.env.CASEWEAVE_E2E_COMMIT_SHA ??
   "2664f0b94bc80b2b63fbdd2ba9dab62b98cc4698";
 const EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_EVIDENCE_URL ??
-  `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-delivery.md`;
+  `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-counter-facts.txt`;
 const COUNTER_EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_COUNTER_EVIDENCE_URL ??
   `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-counter-facts.txt`;
+const APP_EVIDENCE_URL =
+  process.env.CASEWEAVE_E2E_APP_EVIDENCE_URL ??
+  "https://caseweave.vercel.app/evidence/caseweave-remediation.txt";
 
 type AccountName = "owner" | "party_a" | "party_b" | "third";
 
@@ -148,6 +156,27 @@ async function readCase(client: any, functionName: string, args: any[] = []) {
   throw lastError instanceof Error ? lastError : new Error("StudioNet read failed");
 }
 
+async function readReceiver(client: any, functionName: string, args: any[] = []) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      return await client.readContract({
+        address: RECEIVER_ADDRESS,
+        functionName,
+        args,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < 8) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(1000 * (attempt + 1), 5000)),
+        );
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("StudioNet receiver read failed");
+}
+
 async function readConsumer(
   client: any,
   functionName: string,
@@ -251,6 +280,20 @@ async function waitForTriggered(
   return [];
 }
 
+async function waitForSuccessfulChild(client: any, parentHash: string, label: string) {
+  const childIds = await waitForTriggered(client, parentHash);
+  if (childIds.length === 0) {
+    throw new Error(`${label} finalized without a tracked child transaction`);
+  }
+  const childHash = childIds[0];
+  const waited = await waitForFinalizedReceipt(client, childHash);
+  const full = await getTransactionWithRetry(client, childHash).catch(() => null);
+  const receipt = mergedReceipt(waited, full);
+  const error = getExecutionError(receipt);
+  if (error) throw new Error(`${label} child ${childHash} failed: ${error}`);
+  return { childHash, receipt, childIds };
+}
+
 it(
   "completes the structured CaseWeave workflow on StudioNet",
   async () => {
@@ -261,6 +304,7 @@ it(
       chainId: 61999,
       rpc: "https://studio.genlayer.com/api",
       contract: CONTRACT_ADDRESS,
+      receiver: RECEIVER_ADDRESS,
       consumer: CONSUMER_ADDRESS ?? null,
       evidenceUrl: EVIDENCE_URL,
       transactions: evidence,
@@ -282,6 +326,9 @@ it(
 
     try {
       expect((await readCase(ownerClient, "get_owner")) as string).toBe(owner.address);
+      expect((await readCase(ownerClient, "get_settlement_receiver")) as string).toBe(RECEIVER_ADDRESS);
+      expect((await readReceiver(ownerClient, "get_trusted_court")) as string).toBe(CONTRACT_ADDRESS);
+      expect((await readConsumer(ownerClient, "get_trusted_court")) as string).toBe(CONTRACT_ADDRESS);
 
       const commitSha = EVIDENCE_COMMIT;
       const repositoryUrl = "https://github.com/ometere123/caseweave";
@@ -404,17 +451,15 @@ it(
         commitSha,
         pullRequest: { number: 1, head_sha: commitSha, merged: true },
         changedFiles: [
-          "contracts/caseweave.py",
-          "app/lib/contract.ts",
           "docs/evidence/caseweave-counter-facts.txt",
-          "docs/evidence/caseweave-delivery.md",
+          "test/frontend/studionet_e2e.test.ts",
         ],
         ciResults: {
           commit_sha: commitSha,
           conclusion: "success",
           workflow: "caseweave-ci",
         },
-        deploymentArtifacts: ["https://caseweave.vercel.app"],
+        deploymentArtifacts: ["https://caseweave.vercel.app", APP_EVIDENCE_URL],
         evidenceUrl: EVIDENCE_URL,
       });
       const registered = await send(
@@ -458,8 +503,8 @@ it(
         [
           agreementId,
           proofId,
-          "The developer did not satisfy the committed delivery obligation with independently verifiable evidence.",
-          "require_revision",
+          "The committed software delivery is complete and the claimant requests release of the funded milestone to the claimant after independent verification. The verified commit-pinned evidence satisfies the obligation.",
+          "release_payment",
         ],
         evidence,
       );
@@ -481,14 +526,34 @@ it(
         "submit_response",
         [
           disputeId,
-          "The developer relies on the committed source and requests independent assessment.",
-          [],
+          "The developer submits a commit-pinned delivery record and requests independent assessment of the funded milestone.",
+          [COUNTER_EVIDENCE_URL],
         ],
         evidence,
       );
       const disputeAfterResponse = await readCase(partyAClient, "get_dispute", [disputeId]);
       expect(disputeAfterResponse.status).toBe("awaiting_precedent_search");
       state.states.disputeAfterResponse = disputeAfterResponse;
+
+      await send(
+        "verify respondent delivery evidence",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "verify_evidence_url",
+        [disputeId, "respondent", 0],
+        evidence,
+      );
+
+      await send(
+        "commit the immutable appeal window before verdict finalization",
+        partyBClient,
+        partyB,
+        CONTRACT_ADDRESS,
+        "set_appeal_window",
+        [disputeId, "2099-12-31T23:59:59Z"],
+        evidence,
+      );
 
       await send(
         "verify claimant evidence snapshot",
@@ -499,19 +564,37 @@ it(
         [disputeId, "claimant", 0],
         evidence,
       );
+      await send(
+        "add concrete delivery artifact as claimant evidence",
+        partyBClient,
+        partyB,
+        CONTRACT_ADDRESS,
+        "add_evidence",
+        [disputeId, "claimant", APP_EVIDENCE_URL],
+        evidence,
+      );
+      await send(
+        "verify concrete claimant delivery artifact",
+        partyBClient,
+        partyB,
+        CONTRACT_ADDRESS,
+        "verify_evidence_url",
+        [disputeId, "claimant", 1],
+        evidence,
+      );
       const challenge = await send(
-        "challenge a material evidence claim as respondent",
-        partyAClient,
-        partyA,
+        "challenge a material evidence claim as claimant",
+        partyBClient,
+        partyB,
         CONTRACT_ADDRESS,
         "challenge_evidence",
         [
           disputeId,
-          "claimant",
+          "respondent",
           0,
-          "incomplete",
-          "The fetched artifact does not by itself prove every contractual obligation or the absence of an unrelated completion condition.",
-          COUNTER_EVIDENCE_URL,
+          "authenticity",
+          "The respondent's delivery record must be independently re-fetched before this assertion is admitted.",
+          "",
         ],
         evidence,
       );
@@ -528,15 +611,6 @@ it(
         CONTRACT_ADDRESS,
         "resolve_evidence_challenge",
         [challengeId],
-        evidence,
-      );
-      await send(
-        "verify respondent counter-evidence snapshot",
-        partyAClient,
-        partyA,
-        CONTRACT_ADDRESS,
-        "verify_evidence_url",
-        [disputeId, "respondent", 0],
         evidence,
       );
       state.states.evidenceAfterChallenge = await readCase(
@@ -658,7 +732,7 @@ it(
       state.states.afterAppeal = afterAppeal;
 
       const bondRelease = await send(
-        "release the resolved appeal bond through a tracked child transfer",
+        "release the resolved appeal bond into trusted custody",
         partyAClient,
         partyA,
         CONTRACT_ADDRESS,
@@ -666,49 +740,116 @@ it(
         [appealId],
         evidence,
       );
-      const bondChildIds = bondRelease.childTransactionIds.length
-        ? bondRelease.childTransactionIds
-        : await waitForTriggered(partyAClient, bondRelease.hash);
-      if (bondChildIds.length === 0) {
-        throw new Error("appeal-bond release finalized without a tracked child transfer transaction");
-      }
-      const bondChildHash = bondChildIds[0];
-      const bondChildReceipt = await waitForFinalizedReceipt(partyAClient, bondChildHash);
-      const bondChildFull = await getTransactionWithRetry(partyAClient, bondChildHash).catch(() => null);
-      const bondChild = mergedReceipt(bondChildReceipt, bondChildFull);
-      const bondChildError = getExecutionError(bondChild);
-      if (bondChildError) throw new Error(`child appeal-bond transfer failed: ${bondChildError}`);
       const bondTransferId =
         extractTransactionReturnString(bondRelease.receipt) ??
         lastId(await readCase(partyAClient, "list_transfers", [agreementId]), "list_transfers");
-      const bondBeforeConfirmation = await readCase(partyAClient, "get_transfer", [bondTransferId]);
-      const bondConfirmed = await send(
-        "confirm appeal-bond delivery after child finality",
+      const bondBeforeCustody = await readCase(partyAClient, "get_transfer", [bondTransferId]);
+      const bondReceiverChild = await waitForSuccessfulChild(
         partyAClient,
-        partyA,
+        bondRelease.hash,
+        "appeal-bond custody message",
+      );
+      const bondCallbackChild = await waitForSuccessfulChild(
+        partyAClient,
+        bondReceiverChild.childHash,
+        "appeal-bond custody callback",
+      );
+      const bondAfterCustody = await readCase(partyAClient, "get_transfer", [bondTransferId]);
+      const bondCustody = await readReceiver(partyAClient, "get_custody", [bondTransferId]);
+      expect(bondAfterCustody.status).toBe("custodied");
+      expect(bondCustody.status).toBe("custodied");
+
+      const bondFakeBefore = await readCase(partyAClient, "get_transfer", [bondTransferId]);
+      const bondFake = await send(
+        "reject fabricated appeal-bond child hash",
+        thirdClient,
+        third,
         CONTRACT_ADDRESS,
         "confirm_transfer",
-        [bondTransferId, bondChildHash],
+        [bondTransferId, `0x${"1".repeat(64)}`],
+        evidence,
+        0n,
+        false,
+      );
+      const bondFakeAfter = await readCase(partyAClient, "get_transfer", [bondTransferId]);
+      expect(bondFakeAfter).toEqual(bondFakeBefore);
+
+      const bondWithdraw = await send(
+        "withdraw appeal bond from tracked custody",
+        partyAClient,
+        partyA,
+        RECEIVER_ADDRESS,
+        "withdraw",
+        [bondTransferId],
         evidence,
       );
-      const bondAfterConfirmation = await readCase(partyAClient, "get_transfer", [bondTransferId]);
-      expect(bondAfterConfirmation.status).toBe("delivered");
+      const bondWithdrawalChild = await waitForSuccessfulChild(
+        partyAClient,
+        bondWithdraw.hash,
+        "appeal-bond beneficiary withdrawal",
+      );
+      const bondCustodyAfterWithdrawal = await readReceiver(
+        partyAClient,
+        "get_custody",
+        [bondTransferId],
+      );
+      expect(bondCustodyAfterWithdrawal.status).toBe("withdrawal_submitted");
+      const bondWithdrawalLockRelease = await send(
+        "reconcile finalized appeal-bond child with trusted receiver",
+        ownerClient,
+        owner,
+        RECEIVER_ADDRESS,
+        "release_withdrawal_lock",
+        [bondTransferId, bondWithdrawalChild.childHash],
+        evidence,
+      );
+      const bondCustodyAfterReconciliation = await readReceiver(
+        ownerClient,
+        "get_custody",
+        [bondTransferId],
+      );
+      expect(bondCustodyAfterReconciliation.status).toBe("withdrawal_submitted");
+      expect(bondCustodyAfterReconciliation.withdrawal_child_transaction_id).toBe(
+        bondWithdrawalChild.childHash,
+      );
       state.appealBond = {
         transaction: bondRelease.item,
-        childTransaction: {
-          hash: bondChildHash,
-          explorer: getExplorerTxUrl(bondChildHash),
-          consensusStatus: bondChild.statusName ?? bondChild.status,
-          executionResult: leaderReceipt(bondChild)?.execution_result ?? "UNKNOWN",
+        transferId: bondTransferId,
+        beforeCustody: bondBeforeCustody,
+        afterCustody: bondAfterCustody,
+        custody: bondCustody,
+        custodyChild: {
+          hash: bondReceiverChild.childHash,
+          explorer: getExplorerTxUrl(bondReceiverChild.childHash),
+          consensusStatus: bondReceiverChild.receipt.statusName ?? bondReceiverChild.receipt.status,
+          executionResult: leaderReceipt(bondReceiverChild.receipt)?.execution_result ?? "UNKNOWN",
         },
-        confirmation: bondConfirmed.item,
-        before: bondBeforeConfirmation,
-        after: bondAfterConfirmation,
+        callbackChild: {
+          hash: bondCallbackChild.childHash,
+          explorer: getExplorerTxUrl(bondCallbackChild.childHash),
+          consensusStatus: bondCallbackChild.receipt.statusName ?? bondCallbackChild.receipt.status,
+          executionResult: leaderReceipt(bondCallbackChild.receipt)?.execution_result ?? "UNKNOWN",
+        },
+        fabricatedConfirmation: {
+          transaction: bondFake.item,
+          before: bondFakeBefore,
+          after: bondFakeAfter,
+        },
+        withdrawal: {
+          transaction: bondWithdraw.item,
+          child: {
+            hash: bondWithdrawalChild.childHash,
+            explorer: getExplorerTxUrl(bondWithdrawalChild.childHash),
+            consensusStatus: bondWithdrawalChild.receipt.statusName ?? bondWithdrawalChild.receipt.status,
+          },
+          custody: bondCustodyAfterWithdrawal,
+        },
+        reconciliation: {
+          transaction: bondWithdrawalLockRelease.item,
+          custody: bondCustodyAfterReconciliation,
+        },
       };
 
-      if (!CONSUMER_ADDRESS) {
-        throw new Error("CASEWEAVE_E2E_CONSUMER_ADDRESS is required for the cross-contract proof");
-      }
       const currentJudgment = afterAppeal.judgment;
       const consumed = await send(
         "consume finalized judgment from the second Intelligent Contract",
@@ -725,7 +866,10 @@ it(
         ],
         evidence,
       );
-      const consumedJudgment = await readConsumer(ownerClient, "get_consumed", [currentJudgment.judgment_id]);
+      const consumedJudgment = await readConsumer(ownerClient, "get_consumed", [
+        toCalldataAddress(CONTRACT_ADDRESS),
+        currentJudgment.judgment_id,
+      ]);
       expect(consumedJudgment.judgment_id).toBe(currentJudgment.judgment_id);
       expect(consumedJudgment.version).toBe(Number(currentJudgment.version));
       state.consumer = { transaction: consumed.item, record: consumedJudgment };
@@ -739,55 +883,119 @@ it(
         [disputeId],
         evidence,
       );
-      const childIds = settlement.childTransactionIds.length
-        ? settlement.childTransactionIds
-        : await waitForTriggered(partyAClient, settlement.hash);
-      if (childIds.length === 0) {
-        throw new Error("settlement finalized without a tracked child transfer transaction");
-      }
-      const childHash = childIds[0];
-      const childReceipt = await waitForFinalizedReceipt(partyAClient, childHash);
-      const childFull = await getTransactionWithRetry(partyAClient, childHash).catch(() => null);
-      const child = mergedReceipt(childReceipt, childFull);
-      const childError = getExecutionError(child);
-      if (childError) throw new Error(`child settlement transfer failed: ${childError}`);
       const transferId =
         extractTransactionReturnString(settlement.receipt) ??
         lastId(await readCase(partyAClient, "list_transfers", [agreementId]), "list_transfers");
-      const transferBeforeConfirmation = await readCase(partyAClient, "get_transfer", [transferId]);
-      const recipient = String(transferBeforeConfirmation.recipient).toLowerCase();
-      const recipientClient = recipient === partyA.address.toLowerCase() ? partyAClient : partyBClient;
-      const recipientAccount = recipient === partyA.address.toLowerCase() ? partyA : partyB;
-      const confirmed = await send(
-        "confirm settlement only after child transfer finality",
-        recipientClient,
-        recipientAccount,
+      const transferBeforeCustody = await readCase(partyAClient, "get_transfer", [transferId]);
+      const fakeSettlement = await send(
+        "reject fabricated settlement child hash",
+        thirdClient,
+        third,
         CONTRACT_ADDRESS,
         "confirm_transfer",
-        [transferId, childHash],
+        [transferId, `0x${"f".repeat(64)}`],
+        evidence,
+        0n,
+        false,
+      );
+      const transferAfterFake = await readCase(partyAClient, "get_transfer", [transferId]);
+      expect(transferAfterFake).toEqual(transferBeforeCustody);
+
+      const settlementReceiverChild = await waitForSuccessfulChild(
+        partyAClient,
+        settlement.hash,
+        "judgment settlement custody message",
+      );
+      const settlementCallbackChild = await waitForSuccessfulChild(
+        partyAClient,
+        settlementReceiverChild.childHash,
+        "judgment settlement custody callback",
+      );
+      const transferAfterCustody = await readCase(partyAClient, "get_transfer", [transferId]);
+      const receiverCustody = await readReceiver(partyAClient, "get_custody", [transferId]);
+      expect(transferAfterCustody.status).toBe("custodied");
+      expect(receiverCustody.status).toBe("custodied");
+
+      const recipient = String(transferAfterCustody.recipient).toLowerCase();
+      const recipientClient = recipient === partyA.address.toLowerCase() ? partyAClient : partyBClient;
+      const recipientAccount = recipient === partyA.address.toLowerCase() ? partyA : partyB;
+      const withdrawal = await send(
+        "withdraw settlement from tracked custody",
+        recipientClient,
+        recipientAccount,
+        RECEIVER_ADDRESS,
+        "withdraw",
+        [transferId],
         evidence,
       );
-      const transferAfterConfirmation = await readCase(recipientClient, "get_transfer", [transferId]);
+      const withdrawalChild = await waitForSuccessfulChild(
+        recipientClient,
+        withdrawal.hash,
+        "settlement beneficiary withdrawal",
+      );
+      const transferAfterWithdrawal = await readCase(recipientClient, "get_transfer", [transferId]);
+      const receiverAfterWithdrawal = await readReceiver(recipientClient, "get_custody", [transferId]);
       const escrowAfterSettlement = await readCase(recipientClient, "get_escrow", [agreementId]);
       const accounting = await readCase(recipientClient, "get_accounting_invariant");
-      expect(transferAfterConfirmation.status).toBe("delivered");
+      expect(transferAfterWithdrawal.status).toBe("custodied");
+      expect(receiverAfterWithdrawal.status).toBe("withdrawal_submitted");
       expect(escrowAfterSettlement.pending_transfer).toBe(0);
       expect(accounting.solvent).toBe(true);
+      const duplicateSettlement = await send(
+        "reject duplicate judgment settlement",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "settle_judgment",
+        [disputeId],
+        evidence,
+        0n,
+        false,
+      );
       state.settlement = {
         transaction: settlement.item,
-        childTransaction: {
-          hash: childHash,
-          explorer: getExplorerTxUrl(childHash),
-          consensusStatus: child.statusName ?? child.status,
-          executionResult: leaderReceipt(child)?.execution_result ?? "UNKNOWN",
+        transferId,
+        beforeCustody: transferBeforeCustody,
+        afterCustody: transferAfterCustody,
+        receiverCustody,
+        custodyChild: {
+          hash: settlementReceiverChild.childHash,
+          explorer: getExplorerTxUrl(settlementReceiverChild.childHash),
+          consensusStatus: settlementReceiverChild.receipt.statusName ?? settlementReceiverChild.receipt.status,
+          executionResult: leaderReceipt(settlementReceiverChild.receipt)?.execution_result ?? "UNKNOWN",
         },
-        confirmation: confirmed.item,
-        transferBeforeConfirmation,
-        transferAfterConfirmation,
+        callbackChild: {
+          hash: settlementCallbackChild.childHash,
+          explorer: getExplorerTxUrl(settlementCallbackChild.childHash),
+          consensusStatus: settlementCallbackChild.receipt.statusName ?? settlementCallbackChild.receipt.status,
+          executionResult: leaderReceipt(settlementCallbackChild.receipt)?.execution_result ?? "UNKNOWN",
+        },
+        fabricatedConfirmation: {
+          transaction: fakeSettlement.item,
+          before: transferBeforeCustody,
+          after: transferAfterFake,
+        },
+        withdrawal: {
+          transaction: withdrawal.item,
+          child: {
+            hash: withdrawalChild.childHash,
+            explorer: getExplorerTxUrl(withdrawalChild.childHash),
+            consensusStatus: withdrawalChild.receipt.statusName ?? withdrawalChild.receipt.status,
+          },
+          transfer: transferAfterWithdrawal,
+          custody: receiverAfterWithdrawal,
+        },
+        duplicateAttempt: duplicateSettlement.item,
         escrowAfterSettlement,
         accounting,
       };
-      state.finalState = afterAppeal;
+      state.finalState = {
+        appeal: afterAppeal,
+        judgment: await readCase(ownerClient, "get_current_judgment", [disputeId]),
+        precedent: await readCase(ownerClient, "get_precedent_case", [caseId]),
+        transfer: transferAfterWithdrawal,
+        receiverCustody: receiverAfterWithdrawal,
+      };
       writeOutput();
     } catch (error) {
       state.failure = error instanceof Error ? error.message : String(error);

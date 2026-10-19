@@ -2386,6 +2386,16 @@ Return only canonical JSON matching this schema:
 }}
 
 Do not include markdown. Do not include private reasoning. Do not invent evidence that was not provided.
+
+Payout safety is deterministic. The remedy must match the verdict exactly:
+- claimant_wins => release / claimant / 10000
+- respondent_wins => release / respondent / 10000
+- partial_release => partial_release / claimant or respondent / a value from 1 through 9999
+- refund => refund / creator / 10000
+- every other verdict category => none / none / 0
+Never pair revision_required, insufficient_evidence, no_breach, mutual_fault,
+settlement_recommended, bad_faith_claim, or escalate_to_human with a payout.
+The requested outcome is an input label, not a verdict category.
 """
             result = gl.nondet.exec_prompt(prompt).replace("```json", "").replace("```", "").strip()
             return json.dumps(json.loads(result), sort_keys=True)
@@ -2420,6 +2430,8 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
                         return False
                 candidate_remedy = candidate.get("remedy")
                 independent_remedy = independent.get("remedy")
+                self._canonical_remedy(candidate_remedy, candidate.get("verdict", ""))
+                self._canonical_remedy(independent_remedy, independent.get("verdict", ""))
                 if self._remedy_signature(candidate_remedy) != self._remedy_signature(independent_remedy):
                     return False
                 # Validators independently re-evaluate the material semantic
