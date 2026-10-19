@@ -125,11 +125,24 @@ async function waitForFinalizedReceipt(client: any, hash: string, attempts = 4) 
 }
 
 async function readCase(client: any, functionName: string, args: any[] = []) {
-  return client.readContract({
-    address: CONTRACT_ADDRESS,
-    functionName,
-    args,
-  });
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      return await client.readContract({
+        address: CONTRACT_ADDRESS,
+        functionName,
+        args,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < 8) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(1000 * (attempt + 1), 5000)),
+        );
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("StudioNet read failed");
 }
 
 async function readConsumer(
@@ -142,11 +155,24 @@ async function readConsumer(
       "CASEWEAVE_E2E_CONSUMER_ADDRESS is required for the cross-contract proof",
     );
   }
-  return client.readContract({
-    address: CONSUMER_ADDRESS,
-    functionName,
-    args,
-  });
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      return await client.readContract({
+        address: CONSUMER_ADDRESS,
+        functionName,
+        args,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < 8) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, Math.min(1000 * (attempt + 1), 5000)),
+        );
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("StudioNet consumer read failed");
 }
 
 async function triggered(client: any, hash: string): Promise<string[]> {
