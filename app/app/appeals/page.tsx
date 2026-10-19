@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { readContract, writeContract } from "../../lib/genlayer";
+import { getExplorerTxUrl, readContract, writeContract } from "../../lib/genlayer";
 import { useWallet } from "../../store/useWallet";
 import type { Appeal, Dispute } from "../../lib/contract";
 import { AppealGroundSelector } from "../../components/AppealGroundSelector";
@@ -18,6 +18,7 @@ export default function AppealsPage() {
   const [requestedChange, setRequestedChange] = useState("");
   const [bond, setBond] = useState("10");
   const [submitting, setSubmitting] = useState(false);
+  const [lastTransaction, setLastTransaction] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -55,12 +56,17 @@ export default function AppealsPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await writeContract(address, "file_appeal", [
+      const bondAmount = Number(bond);
+      if (!Number.isSafeInteger(bondAmount) || bondAmount <= 0) {
+        throw new Error("Appeal bond must be a positive whole number of GEN.");
+      }
+      const result = await writeContract(address, "file_appeal", [
         disputeId,
         ground,
         requestedChange,
-        Number(bond) || 0,
-      ]);
+        bondAmount,
+      ], BigInt(bondAmount));
+      setLastTransaction(result.hash);
       setShowForm(false);
       setDisputeId("");
       setGround("");
@@ -129,6 +135,19 @@ export default function AppealsPage() {
       )}
 
       {error && <p className="text-dispute text-sm mb-4">{error}</p>}
+      {lastTransaction && (
+        <p className="text-xs text-muted mb-4">
+          Last finalized transaction: {" "}
+          <a
+            href={getExplorerTxUrl(lastTransaction)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-citation hover:underline break-all"
+          >
+            {lastTransaction}
+          </a>
+        </p>
+      )}
       {appeals !== null && entries.length === 0 && (
         <p className="text-muted text-sm italic">No appeals filed yet.</p>
       )}

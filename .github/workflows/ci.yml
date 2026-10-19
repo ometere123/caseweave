@@ -28,6 +28,7 @@ jobs:
       - run: python -m unittest discover -v
       - run: gltest test/test_caseweave_direct.py test/test_caseweave_milestone_direct.py -v -s
       - run: genvm-lint check contracts/caseweave.py --json
+      - run: genvm-lint check contracts/caseweave_settlement_receiver.py --json
       - run: genvm-lint check contracts/caseweave_judgment_consumer.py --json
       - run: npm run test:frontend
       - run: npm run build --prefix app

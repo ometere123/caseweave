@@ -9,6 +9,10 @@ export const CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS ??
     "0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71") as `0x${string}` | "";
 
+export const CASEWEAVE_SETTLEMENT_RECEIVER_ADDRESS =
+  (process.env.NEXT_PUBLIC_CASEWEAVE_SETTLEMENT_RECEIVER_ADDRESS ??
+    "") as `0x${string}` | "";
+
 export const EVIDENCE_STATUSES = [
   "unverified",
   "verified",
@@ -268,6 +272,8 @@ export type TransferRecord = {
   recipient: string;
   amount: number;
   purpose: string;
+  source_bucket: string;
+  proof_commitment: string;
   status: string;
   child_transaction_id: string;
   created_at: string;
@@ -350,6 +356,11 @@ export type Verdict = {
   distinguished_cases: string[];
   weakened_cases: string[];
   overturned_cases: string[];
+  remedy: {
+    action: string;
+    recipient_role: string;
+    amount_bps: number;
+  };
   holding: string;
   short_reason: string;
   legal_issue?: string;

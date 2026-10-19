@@ -50,6 +50,11 @@ VERDICT_RESULT = "```json\n" + json.dumps(
         "distinguished_cases": [],
         "weakened_cases": [],
         "overturned_cases": [],
+        "remedy": {
+            "action": "release",
+            "recipient_role": "claimant",
+            "amount_bps": 10000,
+        },
         "holding": "A party that does not deliver the agreed work breaches the agreement.",
         "short_reason": "The verified evidence supports the claimant's account.",
         "legal_issue": "Whether the agreed work was delivered.",
@@ -68,6 +73,11 @@ APPEAL_RESULT = "```json\n" + json.dumps(
         "result": "overturned_precedent",
         "affected_case_id": "CASE_1",
         "remedy_outcome": "refund",
+        "remedy": {
+            "action": "refund",
+            "recipient_role": "creator",
+            "amount_bps": 10000,
+        },
         "reasoning": "The appellate validators found the original precedent treatment unsupported by the frozen evidence.",
         "findings": [
             {
@@ -120,6 +130,8 @@ def _create_pending_appeal(court, direct_vm, owner, alice, bob) -> tuple[str, st
     direct_vm.sender = bob
     court.submit_response(dispute_id, "The respondent disputes the claim.", [])
     assert court.get_dispute(dispute_id)["status"] == "awaiting_precedent_search"
+    direct_vm.sender = alice
+    court.set_appeal_window(dispute_id, "2030-01-01T00:00:00Z")
 
     direct_vm.mock_web(
         r"raw\.githubusercontent\.com/ometere123/caseweave/" + EVIDENCE_COMMIT,
@@ -187,8 +199,10 @@ def test_full_lifecycle_and_owner_authorization(
     alice = Address(bytes(alice))
     bob = Address(bytes(bob))
     charlie = Address(bytes(charlie))
+    receiver_address = Address(bytes([0x12]) * 20)
     direct_vm.sender = owner
     assert court.get_owner() == owner.as_hex
+    court.configure_settlement_receiver(receiver_address)
 
     agreement_id, dispute_id, case_id, appeal_id = _create_pending_appeal(
         court, direct_vm, owner, alice, bob
@@ -222,19 +236,83 @@ def test_full_lifecycle_and_owner_authorization(
     assert after["case"]["case_id"] == case_id
     assert after["case"]["status"] == "overturned"
 
-    # The bonded appeal is a real accounted liability.  A resolved appeal may
-    # return it only to the appellant, and only after a tracked child transfer
-    # is confirmed by the recipient.
+    # The bonded appeal is a real accounted liability. A failed child is not
+    # silently marked delivered; it becomes explicitly reconcilable and the
+    # bond can be retried without losing accounting.
     direct_vm.sender = alice
     bond_transfer_id = court.release_appeal_bond(appeal_id)
     assert court.get_transfer(bond_transfer_id)["purpose"] == "appeal_bond_return"
-    with direct_vm.expect_revert("only the intended recipient"):
-        direct_vm.sender = bob
-        court.confirm_transfer(bond_transfer_id, "0x" + "2" * 64)
+    failed_before = court.get_transfer(bond_transfer_id)
+    direct_vm.value = int(failed_before["amount"])
+    court.__on_errored_message__()
+    direct_vm.value = 0
+    assert court.get_transfer(bond_transfer_id)["status"] == "failed"
     direct_vm.sender = alice
-    returned_bond = court.confirm_transfer(bond_transfer_id, "0x" + "2" * 64)
-    assert returned_bond["status"] == "delivered"
+    reconciled = court.reconcile_failed_transfer(bond_transfer_id)
+    assert reconciled["status"] == "reconciled"
+    assert court.get_appeal(appeal_id)["bond_status"] == "eligible_for_return"
+
+    # The legacy hash selector is fail-closed for every caller, including the
+    # intended recipient. It can never mutate a transfer or appeal state.
+    direct_vm.sender = alice
+    second_transfer_id = court.release_appeal_bond(appeal_id)
+    pending_before = court.get_transfer(second_transfer_id)
+    for actor, fake_hash in (
+        (bob, "0x" + "1" * 64),
+        (alice, "0x" + "2" * 64),
+        (owner, "0x" + "3" * 64),
+    ):
+        direct_vm.sender = actor
+        with direct_vm.expect_revert("manual child hash confirmations are disabled"):
+            court.confirm_transfer(second_transfer_id, fake_hash)
+        assert court.get_transfer(second_transfer_id) == pending_before
+
+    # Only the receiver contract may report custody, and every committed field
+    # is checked before the transfer can become custodied.
+    direct_vm.value = 0
+    direct_vm.sender = bob
+    with direct_vm.expect_revert("only the configured settlement receiver"):
+        court.confirm_protocol_receipt(
+            second_transfer_id,
+            receiver_address,
+            alice,
+            int(pending_before["amount"]),
+            pending_before["proof_commitment"],
+        )
+    direct_vm.sender = receiver_address
+    with direct_vm.expect_revert("custody callback amount or commitment mismatch"):
+        court.confirm_protocol_receipt(
+            second_transfer_id,
+            receiver_address,
+            alice,
+            int(pending_before["amount"]) + 1,
+            pending_before["proof_commitment"],
+        )
+    with direct_vm.expect_revert("custody callback amount or commitment mismatch"):
+        court.confirm_protocol_receipt(
+            second_transfer_id,
+            receiver_address,
+            alice,
+            int(pending_before["amount"]),
+            "f" * 64,
+        )
+    returned_bond = court.confirm_protocol_receipt(
+        second_transfer_id,
+        receiver_address,
+        alice,
+        int(pending_before["amount"]),
+        pending_before["proof_commitment"],
+    )
+    assert returned_bond["status"] == "custodied"
     assert court.get_appeal(appeal_id)["bond_status"] == "returned"
+    with direct_vm.expect_revert("transfer is not awaiting custody"):
+        court.confirm_protocol_receipt(
+            second_transfer_id,
+            receiver_address,
+            alice,
+            int(pending_before["amount"]),
+            pending_before["proof_commitment"],
+        )
 
     # A completed appeal cannot be resolved twice or reviewed again.
     with direct_vm.expect_revert("appeal already resolved"):

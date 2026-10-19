@@ -9,6 +9,7 @@ from genlayer import *
 @allow_storage
 @dataclass
 class ConsumedJudgment:
+    court_identity: Address
     judgment_id: str
     caseweave_address: Address
     agreement_id: str
@@ -23,9 +24,13 @@ class ConsumedJudgment:
 class CaseWeaveJudgmentConsumer(gl.Contract):
     consumed: TreeMap[str, ConsumedJudgment]
     consumed_counter: u256
+    trusted_court: Address
 
-    def __init__(self):
+    def __init__(self, trusted_court: Address):
         self.consumed_counter = u256(0)
+        if trusted_court.as_hex.lower() == "0x" + ("0" * 40):
+            raise gl.vm.UserError("trusted court must not be the zero address")
+        self.trusted_court = trusted_court
 
     @gl.public.write
     def consume_judgment(
@@ -36,15 +41,20 @@ class CaseWeaveJudgmentConsumer(gl.Contract):
         expected_dispute_id: str,
         expected_version: int,
     ) -> str:
-        if judgment_id in self.consumed:
+        if caseweave_address != self.trusted_court:
+            raise gl.vm.UserError("consumer is bound to a different CaseWeave court")
+        namespace_key = f"{self.trusted_court.as_hex.lower()}::{judgment_id}"
+        if namespace_key in self.consumed:
             raise gl.vm.UserError("judgment has already been consumed")
-        court = gl.get_contract_at(caseweave_address)
+        court = gl.get_contract_at(self.trusted_court)
         judgment = court.view().get_judgment(judgment_id)
         current = court.view().get_current_judgment(expected_dispute_id)
         if not judgment or not current:
             raise gl.vm.UserError("judgment does not exist")
         if judgment.get("judgment_id") != judgment_id:
             raise gl.vm.UserError("judgment identity mismatch")
+        if str(judgment.get("court_address", "")).lower() != self.trusted_court.as_hex.lower():
+            raise gl.vm.UserError("judgment court identity mismatch")
         if judgment.get("agreement_id") != expected_agreement_id:
             raise gl.vm.UserError("judgment agreement scope mismatch")
         if judgment.get("dispute_id") != expected_dispute_id:
@@ -61,7 +71,8 @@ class CaseWeaveJudgmentConsumer(gl.Contract):
             raise gl.vm.UserError("judgment has been superseded")
 
         self.consumed_counter += 1
-        self.consumed[judgment_id] = ConsumedJudgment(
+        self.consumed[namespace_key] = ConsumedJudgment(
+            court_identity=self.trusted_court,
             judgment_id=judgment_id,
             caseweave_address=caseweave_address,
             agreement_id=expected_agreement_id,
@@ -75,9 +86,13 @@ class CaseWeaveJudgmentConsumer(gl.Contract):
         return judgment_id
 
     @gl.public.view
-    def get_consumed(self, judgment_id: str) -> dict:
-        item = self.consumed[judgment_id]
+    def get_consumed(self, caseweave_address: Address, judgment_id: str) -> dict:
+        if caseweave_address != self.trusted_court:
+            raise gl.vm.UserError("consumer is bound to a different CaseWeave court")
+        namespace_key = f"{self.trusted_court.as_hex.lower()}::{judgment_id}"
+        item = self.consumed[namespace_key]
         return {
+            "court_identity": item.court_identity.as_hex,
             "judgment_id": item.judgment_id,
             "caseweave_address": item.caseweave_address.as_hex,
             "agreement_id": item.agreement_id,
@@ -88,3 +103,7 @@ class CaseWeaveJudgmentConsumer(gl.Contract):
             "version": int(item.version),
             "consumed_at": item.consumed_at,
         }
+
+    @gl.public.view
+    def get_trusted_court(self) -> str:
+        return self.trusted_court.as_hex
