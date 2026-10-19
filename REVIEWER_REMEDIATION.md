@@ -104,11 +104,20 @@ route at `/cases/CASE_1` when connected to the corrected deployment.
 ## Production status and limitations
 
 The repository default, `.env.example`, app README, and deployment references
-all point to the corrected contract and chain 61999. Production Vercel status
-must be confirmed against the deployment environment after the final push;
-the source build alone is not treated as proof that Vercel's environment
-variable has changed. No private keys, keystores, or credentials are stored in
-the repository.
+all point to the corrected contract and chain 61999. Vercel production is
+verified and ready:
+
+- Deployment: <https://vercel.com/delealufejoel-4184s-projects/caseweave/HJadkTVa48pmnMqFEn8T1PzZvrt4>
+- Live alias: <https://caseweave.vercel.app>
+- Deployment ID: `dpl_HJadkTVa48pmnMqFEn8T1PzZvrt4`
+- Build source: `9527876`
+- Live `/agreements/new` response: HTTP 200
+- Live client chunk: `/_next/static/chunks/0gqdo_07n01tk.js` contains the
+  corrected contract address, strict address validation, and the compiled
+  `Uint8Array.from({ length: 20 }, ...)` runtime `CalldataAddress`
+  construction used by the create-agreement builder.
+
+No private keys, keystores, or credentials are stored in the repository.
 
 ## Resubmission response
 
