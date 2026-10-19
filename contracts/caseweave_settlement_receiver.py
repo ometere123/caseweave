@@ -1,4 +1,4 @@
-# v0.3.1
+# v0.3.2
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 """Trusted custody bridge for CaseWeave native-value settlements.
@@ -28,6 +28,7 @@ class CustodyRecord:
     status: str
     received_at: str
     withdrawal_submitted_at: str
+    withdrawal_child_transaction_id: str
 
 
 class CaseWeaveSettlementReceiver(gl.Contract):
@@ -90,6 +91,7 @@ class CaseWeaveSettlementReceiver(gl.Contract):
             status="custodied",
             received_at=gl.message_raw["datetime"],
             withdrawal_submitted_at="",
+            withdrawal_child_transaction_id="",
         )
 
         # This is the only court accounting callback.  The court accepts it
@@ -131,9 +133,6 @@ class CaseWeaveSettlementReceiver(gl.Contract):
             raise gl.vm.UserError("custody record is not withdrawable")
         if gl.message.sender_address != record.beneficiary:
             raise gl.vm.UserError("only the beneficiary may withdraw custody funds")
-        if self.active_withdrawal_id:
-            raise gl.vm.UserError("a withdrawal is already pending")
-
         record.status = "withdrawal_submitted"
         record.withdrawal_submitted_at = gl.message_raw["datetime"]
         self.active_withdrawal_id = transfer_id
@@ -147,6 +146,62 @@ class CaseWeaveSettlementReceiver(gl.Contract):
                 pass
 
         _Recipient(record.beneficiary).emit_transfer(value=record.amount)
+
+    def _valid_child_transaction_id(self, child_transaction_id: str) -> str:
+        cleaned = child_transaction_id.strip()
+        if len(cleaned) != 66 or not cleaned.startswith("0x"):
+            raise gl.vm.UserError("child transaction id must be a 32-byte hash")
+        for character in cleaned[2:]:
+            if character not in "0123456789abcdefABCDEF":
+                raise gl.vm.UserError("child transaction id must be hexadecimal")
+        return cleaned
+
+    @gl.public.write
+    def release_withdrawal_lock(self, transfer_id: str, child_transaction_id: str) -> None:
+        """Release the one-at-a-time EOA lock after external finality is checked.
+
+        GenVM exposes the child transaction to the caller/runtime but does not
+        expose a receipt query to this IC.  The trusted receiver owner may
+        therefore record the independently inspected finalized child hash and
+        release only the concurrency lock.  This never marks custody delivered
+        and cannot be used to create, alter, or settle a court transfer.
+        """
+        if gl.message.sender_address != self.owner:
+            raise gl.vm.UserError("only the receiver owner may release a withdrawal lock")
+        if transfer_id not in self.records:
+            raise gl.vm.UserError("custody record not found")
+        record = self.records[transfer_id]
+        if record.status != "withdrawal_submitted" or self.active_withdrawal_id != transfer_id:
+            raise gl.vm.UserError("withdrawal lock is not active for this record")
+        record.withdrawal_child_transaction_id = self._valid_child_transaction_id(
+            child_transaction_id
+        )
+        self.active_withdrawal_id = ""
+
+    @gl.public.write
+    def reconcile_failed_withdrawal(
+        self, transfer_id: str, child_transaction_id: str
+    ) -> None:
+        """Restore one custody record after the owner verifies child failure.
+
+        The callback is intentionally narrow and owner-gated because GenVM
+        cannot query an external EVM receipt.  A failed-child reconciliation
+        restores the same custody record; it never changes the court judgment
+        or creates a second custody record.
+        """
+        if gl.message.sender_address != self.owner:
+            raise gl.vm.UserError("only the receiver owner may reconcile a failed withdrawal")
+        if transfer_id not in self.records:
+            raise gl.vm.UserError("custody record not found")
+        record = self.records[transfer_id]
+        if record.status != "withdrawal_submitted" or self.active_withdrawal_id != transfer_id:
+            raise gl.vm.UserError("withdrawal failure is not awaiting reconciliation")
+        record.withdrawal_child_transaction_id = self._valid_child_transaction_id(
+            child_transaction_id
+        )
+        record.status = "custodied"
+        record.withdrawal_submitted_at = ""
+        self.active_withdrawal_id = ""
 
     @gl.public.view
     def get_owner(self) -> str:
@@ -168,8 +223,10 @@ class CaseWeaveSettlementReceiver(gl.Contract):
             "status": record.status,
             "received_at": record.received_at,
             "withdrawal_submitted_at": record.withdrawal_submitted_at,
+            "withdrawal_child_transaction_id": record.withdrawal_child_transaction_id,
         }
 
+    @gl.public.write.payable
     def __on_errored_message__(self) -> None:
         if not self.active_withdrawal_id or self.active_withdrawal_id not in self.records:
             return
@@ -177,4 +234,5 @@ class CaseWeaveSettlementReceiver(gl.Contract):
         if record.status == "withdrawal_submitted":
             record.status = "custodied"
             record.withdrawal_submitted_at = ""
+            record.withdrawal_child_transaction_id = ""
         self.active_withdrawal_id = ""
