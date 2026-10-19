@@ -21,7 +21,8 @@ Copy the root `.env.example` values into `app/.env.local` if you need to point
 the frontend at a different deployment.
 
 ```bash
-NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS=0x99be950790dEec2F474e5F6E55845eF75D8872a0
+NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS=0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a
+NEXT_PUBLIC_CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS=0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71
 NEXT_PUBLIC_STUDIONET_CHAIN_ID=61999
 ```
 
@@ -58,6 +59,13 @@ current Studionet deployment.
    verified.
 8. Finalizing the verdict writes a reusable `PrecedentCase` into contract
    storage and records treatment of cited cases.
+9. Appeals use bonded, versioned appellate review. The legacy
+   `resolve_appeal` entry point is a fail-closed guard; merits outcomes come
+   from `request_appeal_review` validator consensus.
+10. The UI exposes structured delivery obligations, GitHub/source proof,
+    evidence challenges, judgment versions, settlement balances, tracked child
+    transfers, and explorer links. It does not present a transaction as
+    successful until GenVM execution and finality are verified.
 
 ## Useful Scripts
 

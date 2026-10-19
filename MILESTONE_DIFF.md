@@ -22,6 +22,9 @@ authorized appeal guard already present. The prior corrected deployment was
 | Frontend | Agreement/dispute/case views | Structured technical agreement flow, funding/proof forms, challenge/appeal/settlement controls, audit links and payment reconciliation |
 | Verification | Direct tests and frontend unit tests | Direct behavioral/adversarial tests, source-fact mocks, Playwright smoke coverage, pinned lint/schema/build/CI gates and live StudioNet evidence |
 
-The immutable implementation diff is the Git commit recorded in
-`DEPLOYMENT.md` after the final deployment. No prior deployment is silently
-rewritten; historical addresses remain labeled as superseded.
+The immutable milestone diff is the pushed range
+`ff4df65945c068d0d3690aea8f2b256abcbbd290..HEAD`; the final HEAD SHA is
+reported with the release handoff and can be independently checked with
+`git diff --stat ff4df65945c068d0d3690aea8f2b256abcbbd290 HEAD`. No prior
+deployment is silently rewritten; historical addresses remain labeled as
+superseded.

@@ -61,6 +61,19 @@ least one evidence item has been fetched, hashed, summarized, and marked
   facts found there - then resolves the dispute using those verified
   evidence records, not the raw links
 
+## Completed milestone capabilities
+
+The current milestone integrates the existing courtroom with eight bounded
+protocol capabilities: structured proof-of-performance agreements; authenticated
+GitHub/raw evidence adapters and immutable challenges; fail-closed substantive
+leader/validator checks; binding precedent policies and treatment history;
+consensus appellate review with versioned judgments; funded GEN escrow with
+tracked native child transfers; the CaseWeaveJudgmentConsumer interface; and
+wallet-connected audit-oriented courtroom UX. The implementation is deliberately
+bounded: external content is untrusted data, green CI is supporting context
+only, and an evidence hash commits fetched bytes rather than proving source
+truthfulness.
+
 ## How it works
 
 ### For agreement parties
@@ -189,7 +202,9 @@ DRAFT (pending_acceptance) -> ACTIVE -> DISPUTED -> RESOLVED
 | `request_precedent_search(id)`  | Reads all active precedent for the agreement type, identifies materially relevant prior cases with similarity scores and distinguishing risks |
 | `request_verdict(id)`           | Weighs the agreement text, both briefs, *verified* evidence, and retrieved precedent; produces a verdict, confidence, precedent alignment, case treatments, and a reusable holding |
 | `finalize_precedent(id)`        | Deterministically turns a reached verdict into a permanent `PrecedentCase` and applies treatment effects to every cited case |
-| `resolve_appeal(id, result)`    | Applies an appeal outcome - affirm, modify, reverse, weaken, or overturn the underlying precedent |
+| `request_appeal_review(id)`     | Independently reassesses a finalized judgment through validator consensus and writes a versioned appellate decision |
+| `resolve_appeal(id, result)`    | Fail-closed compatibility guard; it cannot choose or apply a merits outcome |
+| `consume_judgment(...)`         | Second Intelligent Contract accepts only a current, finalized, scoped judgment |
 
 All non-deterministic outputs are validated against an allowed-value schema
 inside the contract before being written to state.
@@ -202,12 +217,14 @@ inside the contract before being written to state.
 | Chain ID   | 61999                                                               |
 | RPC        | https://studio.genlayer.com/api                                    |
 | Explorer   | https://explorer-studio.genlayer.com                            |
-| Contract   | `0x99be950790dEec2F474e5F6E55845eF75D8872a0`                    |
+| Contract   | `0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a`                    |
+| Judgment consumer | `0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71`              |
 | Source     | [contracts/caseweave.py](contracts/caseweave.py)                    |
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the verified deployment, owner role,
-transaction evidence, redeploy instructions, and the local test accounts used
-to run the reference dispute end-to-end.
+transaction evidence, escrow reconciliation, redeploy instructions, and the
+full StudioNet agreement-to-judgment-to-settlement run. The production
+frontend is [caseweave.vercel.app](https://caseweave.vercel.app).
 
 For the iteration record, see [PROJECT_HISTORY.md](PROJECT_HISTORY.md).
 

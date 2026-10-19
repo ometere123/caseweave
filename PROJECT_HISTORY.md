@@ -38,7 +38,7 @@ Superseded deployment:
 - Updated the verdict prompt to weight verified, unverified, invalid, and
   failed evidence differently.
 
-Current deployment:
+Superseded remediation deployment:
 `0x99be950790dEec2F474e5F6E55845eF75D8872a0`.
 
 ## Frontend Iterations
@@ -50,9 +50,30 @@ Current deployment:
   citation graph, appeal docket, and wallet-aware profile surfaces.
 - Replaced the stock Next.js README with CaseWeave-specific run and route docs.
 
-## Current Focus
+## v4/v5 - Autonomous Contract Justice Protocol milestone
 
-- Prove the project depth with clearer documentation, repeatable demo steps,
-  and regression tests around the contract guardrails.
-- Keep future iterations centered on the same product instead of spinning up
-  unrelated demos.
+Baseline main commit:
+`ff4df65945c068d0d3690aea8f2b256abcbbd290`.
+
+The completed milestone adds the eight integrated capability areas described
+in [MILESTONE_SPEC.md](MILESTONE_SPEC.md): structured proof-of-performance
+commitments; authenticated GitHub/raw evidence and immutable challenges;
+substantive fail-closed validator checks; binding precedent policy and
+versioned lineage; consensus appellate review; native GEN escrow and child
+transfer reconciliation; the CaseWeaveJudgmentConsumer; and a complete
+wallet-connected courtroom/audit UX.
+
+The final court deployment is
+`0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a`, with source commit
+`b528a8ed178b417e718116935d30808e54392761` and source SHA-256
+`AD2E8663D1021E163E301557BD5BBCB96AC64FFF77A9B229D05F8FBDDFD3D6D4`.
+The second Intelligent Contract is
+`0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71`.
+
+The live StudioNet run created AGR_6, PROOF_6, DIS_5, CASE_3, APP_3, and
+judgment JDG_6 through evidence retrieval, challenge resolution, precedent
+search, first-instance consensus, independent appellate consensus, judgment
+consumption, native child transfers, and final settlement. See
+[DEPLOYMENT.md](DEPLOYMENT.md) and
+[MILESTONE_REVIEW_EVIDENCE.md](MILESTONE_REVIEW_EVIDENCE.md) for the
+immutable receipts and state reads.

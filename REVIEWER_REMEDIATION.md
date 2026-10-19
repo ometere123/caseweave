@@ -1,6 +1,8 @@
 # CaseWeave reviewer remediation
 
-Status: remediation implemented, deployed, and exercised on StudioNet.
+Status: the original remediation below is retained as historical provenance.
+The current milestone deployment and consensus appellate model are recorded in
+the final section; production no longer points at the historical address.
 
 ## Original findings and fixes
 
@@ -101,11 +103,11 @@ successful evidence-verification transaction; the evidence was not mocked in
 this run. The resulting `CASE_1` is available through the frontend's cases
 route at `/cases/CASE_1` when connected to the corrected deployment.
 
-## Production status and limitations
+## Historical production snapshot (superseded)
 
-The repository default, `.env.example`, app README, and deployment references
-all point to the corrected contract and chain 61999. Vercel production is
-verified and ready:
+This was the production snapshot for the original remediation deployment. It
+is retained to preserve reviewer provenance and is superseded by the current
+milestone deployment in the section below:
 
 - Deployment: <https://vercel.com/delealufejoel-4184s-projects/caseweave/HJadkTVa48pmnMqFEn8T1PzZvrt4>
 - Live alias: <https://caseweave.vercel.app>
@@ -132,3 +134,26 @@ No private keys, keystores, or credentials are stored in the repository.
 > then filed `APP_1`; an unrelated wallet was rejected and the verified owner
 > resolved the appeal. Explorer links and state/hash evidence are recorded in
 > this report.
+
+## Current milestone supersession
+
+The current milestone preserves the address-serialization fix and all
+execution-result handling, but supersedes the historical owner-discretionary
+merits action described above. The final court is
+`0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a`; the historical
+`0x99be950790dEec2F474e5F6E55845eF75D8872a0` is not an active frontend
+target.
+
+`resolve_appeal` now fails closed and cannot select a merits result. A
+legitimate appeal is resolved only through `request_appeal_review`, which
+independently evaluates the frozen evidence snapshot and writes a versioned
+judgment after substantive validator consensus. The owner remains the
+deployment identity for the narrowly scoped compatibility guard and for
+non-merits operational actions; it cannot override the appellate result.
+
+The final milestone deployment details, source hash, consumer deployment,
+production verification, 24-transaction StudioNet run, unchanged-state
+unauthorized rejection, appellate result, transfer reconciliation, and
+reviewer walkthrough are in [DEPLOYMENT.md](DEPLOYMENT.md),
+[MILESTONE_REVIEW_EVIDENCE.md](MILESTONE_REVIEW_EVIDENCE.md), and
+[TEST_EVIDENCE.md](TEST_EVIDENCE.md).
