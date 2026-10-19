@@ -664,3 +664,70 @@ def test_remanded_appeal_keeps_settlement_locked(
     with direct_vm.expect_revert("settlement is locked until the dispute is finalized"):
         court.settle_judgment(dispute_id)
     assert court.get_escrow(agreement_id) == before
+
+
+def test_receiver_reconciles_eoa_child_locks_without_stranding_other_custody(
+    direct_vm,
+    direct_deploy,
+    direct_owner,
+    direct_alice,
+    direct_bob,
+):
+    direct_vm.sender = direct_owner
+    receiver = direct_deploy(
+        "contracts/caseweave_settlement_receiver.py", sdk_version="v0.2.16"
+    )
+    from genlayer.py.types import Address
+
+    owner = Address(bytes(direct_owner))
+    alice = Address(bytes(direct_alice))
+    bob = Address(bytes(direct_bob))
+    court = Address(bytes([0x71]) * 20)
+    direct_vm.sender = owner
+    receiver.configure_court(court)
+
+    direct_vm.sender = court
+    direct_vm.value = 7
+    receiver.receive_settlement("TR_A", alice, 7, "a" * 64)
+    direct_vm.value = 0
+    direct_vm.sender = alice
+    receiver.withdraw("TR_A")
+    assert receiver.get_custody("TR_A")["status"] == "withdrawal_submitted"
+
+    with direct_vm.expect_revert("only the receiver owner"):
+        receiver.release_withdrawal_lock("TR_A", "0x" + "1" * 64)
+
+    direct_vm.sender = owner
+    receiver.release_withdrawal_lock("TR_A", "0x" + "1" * 64)
+    released = receiver.get_custody("TR_A")
+    assert released["status"] == "withdrawal_submitted"
+    assert released["withdrawal_child_transaction_id"] == "0x" + "1" * 64
+
+    # A successful withdrawal only releases the one-at-a-time lock; another
+    # custody record can proceed without falsely marking the first as paid.
+    direct_vm.sender = court
+    direct_vm.value = 9
+    receiver.receive_settlement("TR_B", bob, 9, "b" * 64)
+    direct_vm.value = 0
+    direct_vm.sender = bob
+    receiver.withdraw("TR_B")
+    assert receiver.get_custody("TR_B")["status"] == "withdrawal_submitted"
+
+    # The runtime error callback restores custody for a failed value child.
+    direct_vm.value = 9
+    receiver.__on_errored_message__()
+    direct_vm.value = 0
+    failed = receiver.get_custody("TR_B")
+    assert failed["status"] == "custodied"
+    assert failed["withdrawal_child_transaction_id"] == ""
+
+    # A failed child is restored only by the runtime error callback. There is
+    # no owner method that can reopen a withdrawal from an asserted hash.
+    direct_vm.sender = bob
+    receiver.withdraw("TR_B")
+    direct_vm.value = 9
+    receiver.__on_errored_message__()
+    direct_vm.value = 0
+    recovered = receiver.get_custody("TR_B")
+    assert recovered["status"] == "custodied"
+    assert recovered["withdrawal_child_transaction_id"] == ""

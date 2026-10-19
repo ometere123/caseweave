@@ -1,4 +1,4 @@
-# v0.3.2
+# v0.3.3
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 """Trusted custody bridge for CaseWeave native-value settlements.
@@ -176,31 +176,6 @@ class CaseWeaveSettlementReceiver(gl.Contract):
         record.withdrawal_child_transaction_id = self._valid_child_transaction_id(
             child_transaction_id
         )
-        self.active_withdrawal_id = ""
-
-    @gl.public.write
-    def reconcile_failed_withdrawal(
-        self, transfer_id: str, child_transaction_id: str
-    ) -> None:
-        """Restore one custody record after the owner verifies child failure.
-
-        The callback is intentionally narrow and owner-gated because GenVM
-        cannot query an external EVM receipt.  A failed-child reconciliation
-        restores the same custody record; it never changes the court judgment
-        or creates a second custody record.
-        """
-        if gl.message.sender_address != self.owner:
-            raise gl.vm.UserError("only the receiver owner may reconcile a failed withdrawal")
-        if transfer_id not in self.records:
-            raise gl.vm.UserError("custody record not found")
-        record = self.records[transfer_id]
-        if record.status != "withdrawal_submitted" or self.active_withdrawal_id != transfer_id:
-            raise gl.vm.UserError("withdrawal failure is not awaiting reconciliation")
-        record.withdrawal_child_transaction_id = self._valid_child_transaction_id(
-            child_transaction_id
-        )
-        record.status = "custodied"
-        record.withdrawal_submitted_at = ""
         self.active_withdrawal_id = ""
 
     @gl.public.view

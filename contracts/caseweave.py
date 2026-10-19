@@ -2793,6 +2793,9 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
         if frozen_snapshot.get("snapshot_id") != appeal.snapshot_id:
             raise gl.vm.UserError("appeal does not reference the committed evidence snapshot")
         frozen_payload = frozen_snapshot.get("payload", {})
+        committed_snapshot_hash = str(frozen_snapshot.get("snapshot_hash", ""))
+        if not committed_snapshot_hash or self._commitment_hash(frozen_payload) != committed_snapshot_hash:
+            raise gl.vm.UserError("committed evidence snapshot hash is invalid")
         snapshot_items = list(frozen_payload.get("claimant", [])) + list(
             frozen_payload.get("respondent", [])
         )
@@ -2813,7 +2816,7 @@ Do not include markdown. Do not include private reasoning. Do not invent evidenc
         dispute_id_local = dispute.dispute_id
         case_id_local = case.case_id
         snapshot_id_local = appeal.snapshot_id
-        snapshot_hash_local = str(frozen_snapshot.get("snapshot_hash", ""))
+        snapshot_hash_local = committed_snapshot_hash
         new_evidence_local = new_evidence_items
         grounds = appeal.appeal_ground
         requested_change = appeal.requested_change
