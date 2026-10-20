@@ -8,8 +8,10 @@
   identity and repository/commit scope must also verify.
 - A verdict snapshot is frozen. Later evidence cannot rewrite the original
   snapshot or judgment.
-- Only a current finalized judgment can settle. `total_liabilities` never
-  exceeds accounted assets and a pending transfer is idempotently reconciled.
+- Only a current finalized judgment after the appeal window can settle.
+  `total_liabilities` never exceeds accounted assets; pending protocol
+  transfers are idempotently reconciled and failed committed transfers can be
+  retried without creating a second successful settlement.
 - A consumed judgment must be current, finalized, correctly scoped and at its
   expected version.
 
@@ -27,8 +29,9 @@
 | Unauthorized appeal resolution | `resolve_appeal` cannot resolve merits for any caller; only appellate consensus changes judgment/case state |
 | Duplicate/concurrent dispute or appeal | Active dispute and pending appeal state gates, current judgment checks and duplicate-resolution guards |
 | Policy weakening or unauthorized precedent mutation | Committed policy checks, bounded candidates, conflict detection, immutable treatments and case history |
-| Double payout/unsupported recipient | Deterministic recipient selection, one active transfer, committed/reserved balances and recipient-only confirmation |
-| Failed child transfer | `__on_errored_message__`, explicit failed status, reconciliation path and no delivered flag before child finality |
+| Double payout/unsupported recipient | Current-judgment remedy resolution, role-bound recipients, one settlement/refund record per judgment, one active transfer, committed/reserved balances and receiver-only custody callback |
+| Fake or unrelated child hash | `confirm_transfer` always reverts. Court custody is confirmed only by the configured receiver, which echoes transfer ID, receiver, beneficiary, amount and commitment; EOA withdrawal hashes never change court accounting |
+| Failed child transfer | Registered `__on_errored_message__` restores the receiver record; the court has explicit failed/reconciled accounting and retry semantics, with no owner method that can reopen a withdrawal from an asserted hash |
 | Stale cross-contract judgment | Consumer checks current judgment, status, appeal state, scope, version and supersession |
 | Credential leakage | No keys, passwords, keystores or environment secrets are committed; E2E reads encrypted local keystores only |
 
@@ -36,6 +39,10 @@
 
 External APIs can be unavailable or rate-limited. CaseWeave fails closed for
 irreversible proof, verdict and appellate effects when the required facts do
-not reach consensus. A production deployment must monitor child-transfer
-statuses and retain the returned explorer evidence; the contract does not
-pretend that emitting a transfer is delivery.
+not reach consensus. The pinned GenVM runtime does not expose an in-contract
+receipt query for a transfer from the custody receiver to an external EOA.
+The receiver therefore records `withdrawal_submitted` and an owner-released,
+externally inspected child hash only as operational audit data; it never turns
+that observation into court settlement proof. A failed child is restored by
+the runtime error callback, and production monitoring must retain the child
+receipt and explorer evidence.

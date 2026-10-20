@@ -217,8 +217,9 @@ inside the contract before being written to state.
 | Chain ID   | 61999                                                               |
 | RPC        | https://studio.genlayer.com/api                                    |
 | Explorer   | https://explorer-studio.genlayer.com                            |
-| Contract   | `0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a`                    |
-| Judgment consumer | `0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71`              |
+| Contract   | `0x3BA8098653902c5A5daf08f26A3759fB06C57a2A`                    |
+| Settlement receiver | `0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f`              |
+| Judgment consumer | `0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211`              |
 | Source     | [contracts/caseweave.py](contracts/caseweave.py)                    |
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the verified deployment, owner role,

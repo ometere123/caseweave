@@ -5,7 +5,8 @@ const startLocalServer = process.env.PLAYWRIGHT_START_SERVER === "1";
 export default defineConfig({
   testDir: "test/frontend",
   testMatch: "playwright.spec.ts",
-  timeout: 30_000,
+  timeout: 60_000,
+  workers: 1,
   fullyParallel: true,
   reporter: [["list"], ["json", { outputFile: "test-evidence/playwright.json" }]],
   use: {

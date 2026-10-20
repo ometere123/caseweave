@@ -1,168 +1,147 @@
-# CaseWeave deployment and proof record
+# CaseWeave final adversarial-remediation deployment
 
-This is the release record for the completed Autonomous Contract Justice
-Protocol milestone. It records the final StudioNet deployment and the
-immutable evidence produced by the live harness; older addresses are retained
-only as historical provenance.
+This is the reproducible release record for the focused security remediation
+from baseline commit `19d8cf71b2572e4082c82d44a8573b153dcc941d`. Historical
+deployments remain listed only as provenance; the addresses below are the
+active StudioNet targets.
 
-## Pinned runtime
+## Pinned environment
 
-- Network: GenLayer `studionet`
+- Network: `studionet`
 - Chain ID: `61999`
 - RPC: <https://studio.genlayer.com/api>
 - Explorer: <https://explorer-studio.genlayer.com>
-- Repository-local GenLayer CLI: `0.39.1`
-- `genlayer-js`: `1.1.8`
-- `genvm-linter`: `0.11.0`
+- Repository-local CLI: `genlayer@0.39.1`
+- SDK: `genlayer-js@1.1.8`
+- Linter: `genvm-linter==0.11.0`
 - Compatible runner: `GENVM_VERSION=v0.2.16`
-- Contract source: `contracts/caseweave.py`
-- Consumer source: `contracts/caseweave_judgment_consumer.py`
+- Frontend: <https://caseweave.vercel.app>
 
-No chain 61997, `studio-dev`, `studio-devnet`, or global CLI was used.
+No chain 61997, `studio-dev`, `studio-devnet`, global CLI, private key,
+keystore, or credential is part of the repository.
 
-## Final deployment
+## Final contracts
 
-| Item | Value |
-| --- | --- |
-| `CaseWeaveCourt` | `0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a` |
-| Court deployment transaction | [0x5c80f28523c9129ccd89dda0b6fa4df7fae768ee15cf9e946e90f29e4779aa40](https://explorer-studio.genlayer.com/tx/0x5c80f28523c9129ccd89dda0b6fa4df7fae768ee15cf9e946e90f29e4779aa40) |
-| Court deployment result | `FINALIZED`, majority agree (`result=6`), leader GenVM `SUCCESS` |
-| Owner from `get_owner()` | `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7` |
-| Deployed source commit | `b528a8ed178b417e718116935d30808e54392761` |
-| Deployed `caseweave.py` SHA-256 | `AD2E8663D1021E163E301557BD5BBCB96AC64FFF77A9B229D05F8FBDDFD3D6D4` |
-| `CaseWeaveJudgmentConsumer` | `0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71` |
-| Consumer deployment transaction | [0x390d9bf3ad87da7a24a3ba45e5d4320e807088a972437756ef2be5eba495fce3](https://explorer-studio.genlayer.com/tx/0x390d9bf3ad87da7a24a3ba45e5d4320e807088a972437756ef2be5eba495fce3) |
-| Consumer deployment result | `FINALIZED`, majority agree (`result=6`), leader GenVM `SUCCESS` |
+| Contract | Address | Source SHA-256 |
+| --- | --- | --- |
+| `CaseWeaveCourt` | `0x3BA8098653902c5A5daf08f26A3759fB06C57a2A` | `4793E610064B36E68BFE551D1C06A2E7B26ECBDE174CE94066ABD065E8EF08F8` |
+| `CaseWeaveSettlementReceiver` | `0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f` | `AC8B807454B877C28C9D9C368F56154809A58095450F7347AC0F7F2E9F293386` |
+| `CaseWeaveJudgmentConsumer` | `0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211` | `402BE27C006D12CF61C3F452EBF41887568EDFF8021E7596D76FF295BACB68C8` |
 
-The committed frontend defaults in `app/lib/contract.ts` and `.env.example`
-point to the court above, with chain ID `61999`. The consumer address is
-configured for the programmable-judgment demonstration.
+Deployer and court owner: `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7`.
+`get_owner()` and the receiver/consumer trust bindings were read after
+deployment and match this deployment identity. The deployed court source is
+the exact `contracts/caseweave.py` byte content represented by the final
+release source commit; the SHA-256 above was checked by the deployment script
+against the finalized deployment receipt.
 
-The court source hash was calculated from the exact source committed at
-`b528a8ed178b417e718116935d30808e54392761` before deployment. There is no
-owner-transfer method. `resolve_appeal` is retained only as a fail-closed
-compatibility guard; merits changes require the validator-consensus
-`request_appeal_review` path.
+### Deployment transactions
 
-## Production frontend
+- Receiver deploy: [0x187c4554707c4ed3c7dc13191ff35e07be725aeb4a13ad4351cad00cb27bf866](https://explorer-studio.genlayer.com/tx/0x187c4554707c4ed3c7dc13191ff35e07be725aeb4a13ad4351cad00cb27bf866)
+- Court deploy: [0x6794a8ffc05660e319b679d63ad78c8ab79ec703a6b8011bdf604f80944333ef](https://explorer-studio.genlayer.com/tx/0x6794a8ffc05660e319b679d63ad78c8ab79ec703a6b8011bdf604f80944333ef)
+- Consumer deploy: [0x01056fb613afee39ecff9a161df8ec2048d4b95d7ea4247668164ce248f7f805](https://explorer-studio.genlayer.com/tx/0x01056fb613afee39ecff9a161df8ec2048d4b95d7ea4247668164ce248f7f805)
+- Court → receiver configuration: [0x6246465116127e626dce153a9d0078a1a74906c9b60f0335ed2444a364598c18](https://explorer-studio.genlayer.com/tx/0x6246465116127e626dce153a9d0078a1a74906c9b60f0335ed2444a364598c18)
+- Receiver → court configuration: [0xa2ed141a52a8f51c59e7e33979be0c94a1842cb23882f9c02cc652b385dd31e2](https://explorer-studio.genlayer.com/tx/0xa2ed141a52a8f51c59e7e33979be0c94a1842cb23882f9c02cc652b385dd31e2)
 
-- Alias: <https://caseweave.vercel.app>
-- Production deployment: <https://vercel.com/delealufejoel-4184s-projects/caseweave/A8jyP2vXbyAzFjmcmJjJgUz7KfeL>
-- Deployment ID: `dpl_A8jyP2vXbyAzFjmcmJjJgUz7KfeL`
-- Deployment URL: <https://caseweave-eeyp6dsni-delealufejoel-4184s-projects.vercel.app>
-- Vercel result: `READY`, production alias assigned
-- Production variables verified: `NEXT_PUBLIC_STUDIONET_CHAIN_ID=61999` and both public court-address variables set to `0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a`.
-- Live `/agreements/new` returned HTTP 200. Its client bundle contains the final court address, strict 20-byte validation, and the compiled `Uint8Array.from({length:20,...})` runtime address construction. The superseded court address is absent.
-- Live Playwright smoke test: `1 passed` against the production alias.
-
-## Historical deployments
-
-These addresses are not active frontend targets:
-
-- `0x99be950790dEec2F474e5F6E55845eF75D8872a0` — prior corrected remediation deployment; superseded by the milestone court above.
-- `0xCdB3EDb59f582bdbDcf6fe153ed79E7b5290dc49` — v2 evidence predecessor.
-- `0xec393236E39578d19081687f2F27d801212f8194` — v1 deployment.
-- `0x322b999682CdDecE9b7e704541F86dC86D18D35a` — vulnerable remediation target; retained only for provenance.
-
-GenLayer has no in-place upgrade in this setup. A storage/schema change
-requires a new deployment and a new evidence run.
+Every deployment/configuration transaction was finalized with consensus
+result `6` and GenVM execution `SUCCESS`.
 
 ## Canonical live evidence
 
 The complete machine-readable record is
-[`test-evidence/studionet-e2e.json`](test-evidence/studionet-e2e.json). It was
-produced by `test/frontend/studionet_e2e.test.ts` using two StudioNet party
-wallets, the court owner, and a third unrelated wallet. It contains 24
-finality-checked application/consumer transactions, object IDs, before/after
-reads, child transfer hashes, consensus status, and GenVM execution results.
+[`test-evidence/studionet-remediation-final-20261020.json`](test-evidence/studionet-remediation-final-20261020.json).
+It contains 32 finalized application, consumer, custody, and expected-negative
+transactions, full hashes, explorer URLs, GenVM results, object IDs, and
+before/after reads.
 
-Evidence inputs were immutable commit-pinned files:
+The immutable delivery fixture is
+[`docs/evidence/caseweave-counter-facts.txt`](docs/evidence/caseweave-counter-facts.txt)
+at commit
+[`abd9e03ab772e9ffddc35c1542c6e013470a93d5`](https://github.com/ometere123/caseweave/commit/abd9e03ab772e9ffddc35c1542c6e013470a93d5).
+The successful proof recorded content hash
+`fcfab26fc940c4ac093d8bb1ebad15ce9e27ec36ff7c42c858fdb96f8d67db23` and
+authoritative GitHub API facts for repository `ometere123/caseweave`, the full
+commit SHA, and exact changed-file membership.
 
-- Delivery record: <https://raw.githubusercontent.com/ometere123/caseweave/2664f0b94bc80b2b63fbdd2ba9dab62b98cc4698/docs/evidence/caseweave-delivery.md>
-- Counter-evidence: <https://raw.githubusercontent.com/ometere123/caseweave/2664f0b94bc80b2b63fbdd2ba9dab62b98cc4698/docs/evidence/caseweave-counter-facts.txt>
-- Counter-evidence fetched hash: `7d1cf5c5bf023039b2a7b40fbac09e1c8c543cafb0e568f6996146b3c193b338`
-- Delivery-proof fetched hash: `5de3bdd4196f90a42fa984d696adc2a9d0efb4fccd29a57799fe7c874ad5ca09`
+## Full StudioNet sequence
 
-The live objects were `AGR_6`, `PROOF_6`, `DIS_5`, `CASE_3`, `APP_3`, and
-current judgment `JDG_6` (version 2). The final judgment is `revision_required`
-with appellate result `affirmed`; the precedent is active and the dispute is
-finalized.
-
-## Full successful agreement-to-judgment sequence
-
-Every row below is `FINALIZED` with GenVM `SUCCESS`, except the explicitly
-expected unauthorized rejection row. The linked JSON contains the complete
-receipt fields and state snapshots.
+All rows marked successful are `FINALIZED` with GenVM `SUCCESS`. The three
+expected-negative rows are finalized rollback transactions whose protected
+state was read before and after.
 
 | # | Method / object | Transaction |
 | ---: | --- | --- |
-| 1 | `create_technical_agreement` → `AGR_6` | [0x8134c17a5341855d16fff7a9de601c2cf89104ead134008fa8c520a8dece9036](https://explorer-studio.genlayer.com/tx/0x8134c17a5341855d16fff7a9de601c2cf89104ead134008fa8c520a8dece9036) |
-| 2 | `accept_agreement` → `AGR_6 active` | [0x7705c9c3fe6cb3655baaaffb2684657446a5551fae557cd17659c163544a339d](https://explorer-studio.genlayer.com/tx/0x7705c9c3fe6cb3655baaaffb2684657446a5551fae557cd17659c163544a339d) |
-| 3 | `fund_agreement` → 1000 GEN deposited | [0x3623401565f1166fb1d12e21847d12f64596ab69cda5e22b6d67c1995ba4ffac](https://explorer-studio.genlayer.com/tx/0x3623401565f1166fb1d12e21847d12f64596ab69cda5e22b6d67c1995ba4ffac) |
-| 4 | `fund_milestone` → `MS_6`, 900 GEN committed | [0x802b52039ccc58d0d65693907680c78e451e1ad85d5297944d69ccfaf1a080a3](https://explorer-studio.genlayer.com/tx/0x802b52039ccc58d0d65693907680c78e451e1ad85d5297944d69ccfaf1a080a3) |
-| 5 | `submit_deliverable` | [0x6fcd98ba18c18079a2b6e53cf6d1da41c5d0d4cf32352ea7e35e65703fa75084](https://explorer-studio.genlayer.com/tx/0x6fcd98ba18c18079a2b6e53cf6d1da41c5d0d4cf32352ea7e35e65703fa75084) |
-| 6 | `register_delivery_proof` → `PROOF_6` | [0xd2044813d74bc5e6a044a235610d19b74409969f48c4003f8ca0edac45f289a6](https://explorer-studio.genlayer.com/tx/0xd2044813d74bc5e6a044a235610d19b74409969f48c4003f8ca0edac45f289a6) |
-| 7 | `verify_delivery_proof` → source facts + obligation findings | [0x7ed2c3ba7a74d7b0d0c4f995b869f347e1ddb28e6e81b6cf4056c91aeb2b3ff2](https://explorer-studio.genlayer.com/tx/0x7ed2c3ba7a74d7b0d0c4f995b869f347e1ddb28e6e81b6cf4056c91aeb2b3ff2) |
-| 8 | `file_performance_dispute` → `DIS_5` | [0x4283bf07c87c8080ce62119055ab8750b85bafb3e2be7d556c0d0d7ebf7f42e1](https://explorer-studio.genlayer.com/tx/0x4283bf07c87c8080ce62119055ab8750b85bafb3e2be7d556c0d0d7ebf7f42e1) |
-| 9 | `submit_response` | [0x750c33e23d0e1c8fa99757ca28ea3639c6a820f03a74b289494a01a367950d01](https://explorer-studio.genlayer.com/tx/0x750c33e23d0e1c8fa99757ca28ea3639c6a820f03a74b289494a01a367950d01) |
-| 10 | `verify_evidence_url` claimant → HTTP 200/hash | [0x418599ed83c01f0d21f282cb77179ee960f6962c73c4793b49c1316fd0ed0141](https://explorer-studio.genlayer.com/tx/0x418599ed83c01f0d21f282cb77179ee960f6962c73c4793b49c1316fd0ed0141) |
-| 11 | `challenge_evidence` | [0xd9d3eb2c13d7b0319e3194a42910ad33016ee7cbc8de32a18dad5deeec1e903f](https://explorer-studio.genlayer.com/tx/0xd9d3eb2c13d7b0319e3194a42910ad33016ee7cbc8de32a18dad5deeec1e903f) |
-| 12 | `resolve_evidence_challenge` | [0xa88f5839051471ce3a971913e299e193bfd3c1e3309e45eb225ed79c683d410f](https://explorer-studio.genlayer.com/tx/0xa88f5839051471ce3a971913e299e193bfd3c1e3309e45eb225ed79c683d410f) |
-| 13 | `verify_evidence_url` respondent counter-evidence → HTTP 200/hash | [0x79238c5966e39961b7e185218fccfd6c75e520f89864e57eb175c4eaa00d7609](https://explorer-studio.genlayer.com/tx/0x79238c5966e39961b7e185218fccfd6c75e520f89864e57eb175c4eaa00d7609) |
-| 14 | `request_precedent_search` → CASE_1/CASE_2 candidates | [0x71e01c624fa45e53546892939271e35e7c7c686174f1c3d7dab28681ae3f8243](https://explorer-studio.genlayer.com/tx/0x71e01c624fa45e53546892939271e35e7c7c686174f1c3d7dab28681ae3f8243) |
-| 15 | `request_verdict` → `JDG_5`, `revision_required` | [0xd7df024e8ddbebfe889e3be42890e50742bc3d67a8791e24674259d6e99f5c32](https://explorer-studio.genlayer.com/tx/0xd7df024e8ddbebfe889e3be42890e50742bc3d67a8791e24674259d6e99f5c32) |
-| 16 | `finalize_precedent` → `CASE_3` | [0x007e33859f844c72283e669d5ffe2ee47cd3da80afb2aaef4d915585714c152f](https://explorer-studio.genlayer.com/tx/0x007e33859f844c72283e669d5ffe2ee47cd3da80afb2aaef4d915585714c152f) |
-| 17 | `file_appeal` → `APP_3` | [0xde5f983d890ce24d7f716e687f48e724e5d66d7935457c791d250200e75a3354](https://explorer-studio.genlayer.com/tx/0xde5f983d890ce24d7f716e687f48e724e5d66d7935457c791d250200e75a3354) |
-| 18 | unauthorized `resolve_appeal` → unchanged state | [0x28bcbea0e38df8b812524a4e70b5d38cfc2a85f9b8965f35af2a089c66d9549d](https://explorer-studio.genlayer.com/tx/0x28bcbea0e38df8b812524a4e70b5d38cfc2a85f9b8965f35af2a089c66d9549d) |
-| 19 | `request_appeal_review` → `JDG_6`, version 2, `affirmed` | [0xb82b61a6fb224921e9bd140f966ad4aa4f37c715acd35be705f304854a668c96](https://explorer-studio.genlayer.com/tx/0xb82b61a6fb224921e9bd140f966ad4aa4f37c715acd35be705f304854a668c96) |
-| 20 | `release_appeal_bond` → `TR_2` | [0xbe6d323c4b1a1cd65442b206678e1bdd791fa7829288a9b4e762147196587bcb](https://explorer-studio.genlayer.com/tx/0xbe6d323c4b1a1cd65442b206678e1bdd791fa7829288a9b4e762147196587bcb) |
-| 21 | `confirm_transfer(TR_2)` → delivered | [0xc510a252459b63ae44bc257e3811a27c300ced3e49a2cc5dfedaecbf77c7f499](https://explorer-studio.genlayer.com/tx/0xc510a252459b63ae44bc257e3811a27c300ced3e49a2cc5dfedaecbf77c7f499) |
-| 22 | consumer `consume_judgment` → `JDG_6` | [0x949a322a1f1ad6a35622432887b20cba4f9e5dcf5ad6a6c688ae751c8e393304](https://explorer-studio.genlayer.com/tx/0x949a322a1f1ad6a35622432887b20cba4f9e5dcf5ad6a6c688ae751c8e393304) |
-| 23 | `settle_judgment` → `TR_3` | [0x01c0838a166617a2a34e7cddf5ded10ffdd26fa82cf41c4f271cb2723ad9be62](https://explorer-studio.genlayer.com/tx/0x01c0838a166617a2a34e7cddf5ded10ffdd26fa82cf41c4f271cb2723ad9be62) |
-| 24 | `confirm_transfer(TR_3)` → delivered | [0x29dfadb00f03d66dadb513da3f0d24f5bda8a75b8677ce267358629713320958](https://explorer-studio.genlayer.com/tx/0x29dfadb00f03d66dadb513da3f0d24f5bda8a75b8677ce267358629713320958) |
+| 1 | `create_technical_agreement` → `AGR_1` | [0x9c396239c3c9254b84ca437e1eeb7fbc0986039d8421515b8aee93457c5261d2](https://explorer-studio.genlayer.com/tx/0x9c396239c3c9254b84ca437e1eeb7fbc0986039d8421515b8aee93457c5261d2) |
+| 2 | `accept_agreement` → active | [0x2a76ddfe0f0504f5fdc9d84ec55b7ce8fa72539bb01d3ad7fb21b3ca03b0003e](https://explorer-studio.genlayer.com/tx/0x2a76ddfe0f0504f5fdc9d84ec55b7ce8fa72539bb01d3ad7fb21b3ca03b0003e) |
+| 3 | `fund_agreement` → 1000 GEN | [0x6bfe18762efa1edf69101e727bfae1650de14bb3195af6e12501c5fc282274c8](https://explorer-studio.genlayer.com/tx/0x6bfe18762efa1edf69101e727bfae1650de14bb3195af6e12501c5fc282274c8) |
+| 4 | `fund_milestone` → 900 GEN committed | [0x00d6d096f4e50f446f216c1584ddf5be3b6a0f9c9b4721a08cd069aab3af9c52](https://explorer-studio.genlayer.com/tx/0x00d6d096f4e50f446f216c1584ddf5be3b6a0f9c9b4721a08cd069aab3af9c52) |
+| 5 | `submit_deliverable` | [0xdc955f25d8f80a595c6631075e2d444e465005083e5fc13096730571a49ebb60](https://explorer-studio.genlayer.com/tx/0xdc955f25d8f80a595c6631075e2d444e465005083e5fc13096730571a49ebb60) |
+| 6 | `register_delivery_proof` → `PROOF_1` | [0x5ba9612b2c805f27437a3a48d2b3fd2b040d932fc299f7b00878dec3bf4afcd8](https://explorer-studio.genlayer.com/tx/0x5ba9612b2c805f27437a3a48d2b3fd2b040d932fc299f7b00878dec3bf4afcd8) |
+| 7 | `verify_delivery_proof` → satisfied source facts | [0x78be1bef422b6b504aadb67828b3cb47d01582596b0749921e23fd03861f604a](https://explorer-studio.genlayer.com/tx/0x78be1bef422b6b504aadb67828b3cb47d01582596b0749921e23fd03861f604a) |
+| 8 | `file_performance_dispute` → `DIS_1` | [0xe3326d469dfe2dcdba73722aac86888a2f012e4b97ce2a5a598200543291ffc2](https://explorer-studio.genlayer.com/tx/0xe3326d469dfe2dcdba73722aac86888a2f012e4b97ce2a5a598200543291ffc2) |
+| 9 | `submit_response` | [0x0ba6080baf66fc9aabeae43b85e43d279578e8d1c7786c013fcb278af9b9bf71](https://explorer-studio.genlayer.com/tx/0x0ba6080baf66fc9aabeae43b85e43d279578e8d1c7786c013fcb278af9b9bf71) |
+| 10 | `verify_evidence_url` → HTTP 200/hash | [0xf82469a8bd4b943879adcb583b1c8d2ede1b4d410505f3cb4fc5099753ef2ba0](https://explorer-studio.genlayer.com/tx/0xf82469a8bd4b943879adcb583b1c8d2ede1b4d410505f3cb4fc5099753ef2ba0) |
+| 11 | `set_appeal_window` → immutable deadline | [0x06c0fa34d470f8e05bf3a1c3bab57b9246465753bbf08e3a68e9d0f3b6ef9e22](https://explorer-studio.genlayer.com/tx/0x06c0fa34d470f8e05bf3a1c3bab57b9246465753bbf08e3a68e9d0f3b6ef9e22) |
+| 12 | `verify_evidence_url` → claimant snapshot | [0x1d0dc5a73bad54dafb0a542c3cc1100581b69d5631e600104a235c232e14ff31](https://explorer-studio.genlayer.com/tx/0x1d0dc5a73bad54dafb0a542c3cc1100581b69d5631e600104a235c232e14ff31) |
+| 13 | `add_evidence` → deployment artifact | [0x1a330a2513a1ac48c20722a7d913097a60291e205e1f5ca7e4b0f1217ede6371](https://explorer-studio.genlayer.com/tx/0x1a330a2513a1ac48c20722a7d913097a60291e205e1f5ca7e4b0f1217ede6371) |
+| 14 | `verify_evidence_url` → artifact verified | [0xa323694aabb35b7a6acabc58ad3f5e7321525dfbfdf727e942f2d7ff3c4d32fe](https://explorer-studio.genlayer.com/tx/0xa323694aabb35b7a6acabc58ad3f5e7321525dfbfdf727e942f2d7ff3c4d32fe) |
+| 15 | `challenge_evidence` | [0x659f424e2331f889eda5616cf37aaa13753c54997749dc6e80270739fb667f5e](https://explorer-studio.genlayer.com/tx/0x659f424e2331f889eda5616cf37aaa13753c54997749dc6e80270739fb667f5e) |
+| 16 | `verify_evidence_url` → counter-evidence | [0xa22c9d0f3fb12dcc610842e55f2ea509743c41c0a5f4526967e5fd50e9bafa21](https://explorer-studio.genlayer.com/tx/0xa22c9d0f3fb12dcc610842e55f2ea509743c41c0a5f4526967e5fd50e9bafa21) |
+| 17 | `resolve_evidence_challenge` → semantic consensus | [0x4a8a9f506a15660c3a7ea3eacf067910718d44ccdddc77c6c49dbdbc3c5ab36c](https://explorer-studio.genlayer.com/tx/0x4a8a9f506a15660c3a7ea3eacf067910718d44ccdddc77c6c49dbdbc3c5ab36c) |
+| 18 | `request_precedent_search` | [0xd70f67daac441482c3182fbeaee033aa15161453100b20acf4a4f28ca4fa8779](https://explorer-studio.genlayer.com/tx/0xd70f67daac441482c3182fbeaee033aa15161453100b20acf4a4f28ca4fa8779) |
+| 19 | `request_verdict` → `claimant_wins` | [0x1aa5a6a85f0d6eab47dd68fa8798264bea9bfcbdf45a026936c5498cf73224cc](https://explorer-studio.genlayer.com/tx/0x1aa5a6a85f0d6eab47dd68fa8798264bea9bfcbdf45a026936c5498cf73224cc) |
+| 20 | `finalize_precedent` → `CASE_1`, `JDG_1` | [0x328dd76054a2029dbfdcbbb6f92d6f7d6c6f8e69daf8e9fd54227ae25d81de5d](https://explorer-studio.genlayer.com/tx/0x328dd76054a2029dbfdcbbb6f92d6f7d6c6f8e69daf8e9fd54227ae25d81de5d) |
+| 21 | `file_appeal` → `APP_1` | [0xf8ce26e24adb39b87b844984af07f51dcf425bb85fd1b150588fc86c1356560d](https://explorer-studio.genlayer.com/tx/0xf8ce26e24adb39b87b844984af07f51dcf425bb85fd1b150588fc86c1356560d) |
+| 22 | unauthorized `resolve_appeal` → unchanged state | [0x7d685d0d17d5752639c0065c22717dd002a23993c59cc813d8c42b0b4ac47d1e](https://explorer-studio.genlayer.com/tx/0x7d685d0d17d5752639c0065c22717dd002a23993c59cc813d8c42b0b4ac47d1e) |
+| 23 | `request_appeal_review` → `JDG_2`, version 2, affirmed | [0xdd0229932663d46e4c30513aebae331a871f4b767f6ec442931aad061334d94a](https://explorer-studio.genlayer.com/tx/0xdd0229932663d46e4c30513aebae331a871f4b767f6ec442931aad061334d94a) |
+| 24 | `release_appeal_bond` → `TR_1`, custody callback | [0x38b8aa92e3a1e3670b13eff04a1c63cd19dd8f13c2df1ffcd9f407c78e31f289](https://explorer-studio.genlayer.com/tx/0x38b8aa92e3a1e3670b13eff04a1c63cd19dd8f13c2df1ffcd9f407c78e31f289) |
+| 25 | fabricated appeal-bond `confirm_transfer` rejected | [0x2f4aa2ced672cbedb82ad5ab94fcd0611b04bc7a543246c5a00e1b5a8f29bf69](https://explorer-studio.genlayer.com/tx/0x2f4aa2ced672cbedb82ad5ab94fcd0611b04bc7a543246c5a00e1b5a8f29bf69) |
+| 26 | `withdraw(TR_1)` → successful child | [0xceae844c7452ea615589829d82c4765c2e432347c122978c4db0ef0abe803a57](https://explorer-studio.genlayer.com/tx/0xceae844c7452ea615589829d82c4765c2e432347c122978c4db0ef0abe803a57) |
+| 27 | `release_withdrawal_lock(TR_1)` → child recorded | [0x71276c72d2993e1a38791b90532232b4886bd1529607175a39f67f986287caa7](https://explorer-studio.genlayer.com/tx/0x71276c72d2993e1a38791b90532232b4886bd1529607175a39f67f986287caa7) |
+| 28 | consumer `consume_judgment` → `JDG_2`, v2 | [0xccdc0e2e0d86d2e073a1af357fb5c184061d4a81f293ffddb48c2c7a28337875](https://explorer-studio.genlayer.com/tx/0xccdc0e2e0d86d2e073a1af357fb5c184061d4a81f293ffddb48c2c7a28337875) |
+| 29 | `settle_judgment` → `TR_2`, 900 GEN | [0xe78408e8bdb53fe194c079f831465f131610ea2553c434926495e96db3e79575](https://explorer-studio.genlayer.com/tx/0xe78408e8bdb53fe194c079f831465f131610ea2553c434926495e96db3e79575) |
+| 30 | fabricated settlement `confirm_transfer` rejected | [0x8904f983d7fb737d6d8a3bad9e564d77379dcc235a202b4cc0cb4688364b59d8](https://explorer-studio.genlayer.com/tx/0x8904f983d7fb737d6d8a3bad9e564d77379dcc235a202b4cc0cb4688364b59d8) |
+| 31 | `withdraw(TR_2)` → successful child | [0x87698f3f355b0428775e81614d42676fedb08bda563987a9965a4a371c45d3d6](https://explorer-studio.genlayer.com/tx/0x87698f3f355b0428775e81614d42676fedb08bda563987a9965a4a371c45d3d6) |
+| 32 | duplicate `settle_judgment` rejected | [0x9e62d42115a99b80e6cc0924125287430b5caca61eed09e846d9c3e07de9fb79](https://explorer-studio.genlayer.com/tx/0x9e62d42115a99b80e6cc0924125287430b5caca61eed09e846d9c3e07de9fb79) |
 
-For row 18, the finalized transaction has GenVM `ERROR`, leader rollback
-payload `only the owner may access the administrative appeal guard`, and the
-before/after appeal, dispute, precedent, and judgment reads are byte-for-byte
-unchanged. This is expected rejection evidence, not a successful write.
+The `TR_2` custody child is
+[0x8c7c865c33f1e5878629afe416e25a8196537793817bbbfcd4b5209c33f6d83f](https://explorer-studio.genlayer.com/tx/0x8c7c865c33f1e5878629afe416e25a8196537793817bbbfcd4b5209c33f6d83f)
+and the trusted callback child is
+[0x230f66b9537ea99db390d8306a119d53136d7d86a15377382ff2582422524eb7](https://explorer-studio.genlayer.com/tx/0x230f66b9537ea99db390d8306a119d53136d7d86a15377382ff2582422524eb7).
+The receiver's EOA withdrawal status intentionally remains
+`withdrawal_submitted`: pinned GenVM cannot independently query an external
+EOA receipt, so the owner-recorded child hash only records the observation and
+never marks court accounting as paid.
 
-## Escrow and judgment final reads
+## Final state and security proofs
 
-After the final transfer confirmation:
+- Current judgment: `JDG_2`, version 2, `claimant_wins`, `affirmed`, closed;
+  snapshot hash `374a04de9393f0780d2053c9223954bf59eec847d3650769c4da89a6cf730b1d`.
+- Precedent: `CASE_1`, active, public, outcome `claimant_wins`.
+- Settlement transfer: `TR_2`, 900 GEN, committed source, receiver custody
+  reached only through the configured court callback.
+- Final escrow read: `actual_deposited=1001`, `available=100`,
+  `committed=0`, `reserved=0`, `pending_transfer=0`, `settled=901`,
+  `failed_transfer_balance=0`, `contract_balance=100`,
+  `total_accounted_assets=100`, `total_liabilities=100`, `solvent=true`.
+- Consumer read: trusted court is the new court address; it stored `AGR_1`,
+  `DIS_1`, `CASE_1`, `JDG_2`, version 2, the same snapshot hash, and outcome.
+- Fabricated hashes and duplicate settlement finalized with GenVM `ERROR`;
+  each before/after read remained unchanged.
 
-```text
-agreement: AGR_6
-actual_deposited: 1001 GEN (1000 agreement funding + 1 appeal bond)
-available: 100
-committed: 0
-reserved: 0
-pending_transfer: 0
-appeal_bond_balance: 0
-settled: 901 (900 judgment settlement + 1 bond return)
-failed_transfer_balance: 0
-contract_balance: 5101
-total_accounted_assets: 5101
-total_liabilities: 5101
-solvent: true
-```
+## Production
 
-The consumer recorded the same authoritative judgment: agreement `AGR_6`,
-dispute `DIS_5`, case `CASE_3`, judgment `JDG_6`, version `2`, outcome
-`revision_required`, snapshot hash
-`40c361583c6e61d92b9bf2f0299c38e2c3ee133bc9ec18a87b9d2cba54ac9e3c`, and the
-final court address.
+The Vercel production variables were updated to the three addresses above and
+chain `61999`. The final source push triggers the project's production deploy;
+the alias is <https://caseweave.vercel.app>. Production verification must
+confirm HTTP 200 for `/agreements/new`, the new court address in the client
+bundle, the compiled `CalldataAddress` conversion, and absence of the
+superseded address.
 
-## Reproduction
+## Historical addresses
 
-```powershell
-$env:GENVM_VERSION='v0.2.16'
-python -m unittest discover -v
-gltest.exe test/test_caseweave_direct.py test/test_caseweave_milestone_direct.py -v -s
-npm run test:frontend
-npm run test:studionet
-$env:PLAYWRIGHT_BASE_URL='https://caseweave.vercel.app'
-npm run test:playwright
-```
+- `0x99be950790dEec2F474e5F6E55845eF75D8872a0` — prior corrected deployment.
+- `0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a` — superseded milestone
+  deployment before this final adversarial remediation.
 
-The live harness uses encrypted local keystores supplied at runtime; no keys,
-passwords, or keystores are part of the repository.
+They are not active frontend targets.

@@ -59,6 +59,14 @@ function executionError(receipt) {
   if (leader?.execution_result && leader.execution_result !== "SUCCESS") {
     return leader.error ?? leader.execution_result;
   }
+  if (leader?.execution_result === "SUCCESS") return null;
+  if (
+    Array.isArray(receipt.consensus_data?.validators) &&
+    receipt.consensus_data.validators.length > 0 &&
+    receipt.consensus_data.validators.every((item) => item.execution_result === "SUCCESS")
+  ) {
+    return null;
+  }
   if (receipt.txExecutionResultName === "FINISHED_WITH_RETURN" || receipt.txExecutionResult === 1) {
     return null;
   }
@@ -113,9 +121,23 @@ function txRecord(label, hash, receipt, contract, method) {
 async function deploy(client, code, label, args = []) {
   const hash = await client.deployContract({ code, args });
   const receipt = await waitFinalized(client, hash);
+  assertSourceCode(receipt, code, label);
   const address = receipt.data?.contract_address ?? receipt.contractAddress;
   if (!address) throw new Error(`${label} did not return a contract address`);
   return { address, transaction: txRecord(label, hash, receipt, address, "deploy") };
+}
+
+function assertSourceCode(receipt, code, label) {
+  const encoded = receipt.data?.contract_code;
+  if (typeof encoded !== "string") {
+    throw new Error(`${label} receipt did not include deployed contract source`);
+  }
+  const deployed = Buffer.from(encoded, "base64");
+  const expectedHash = createHash("sha256").update(code).digest("hex").toUpperCase();
+  const deployedHash = createHash("sha256").update(deployed).digest("hex").toUpperCase();
+  if (deployedHash !== expectedHash) {
+    throw new Error(`${label} deployed source hash ${deployedHash} did not match ${expectedHash}`);
+  }
 }
 
 async function write(client, account, address, functionName, args = []) {
@@ -143,7 +165,30 @@ const consumerCode = new Uint8Array(readFileSync(consumerPath));
 
 await client.initializeConsensusSmartContract();
 
-const receiver = await deploy(client, receiverCode, "deploy CaseWeaveSettlementReceiver");
+let receiver;
+if (process.env.CASEWEAVE_EXISTING_RECEIVER_ADDRESS && process.env.CASEWEAVE_EXISTING_RECEIVER_TX) {
+  const receiverAddress = process.env.CASEWEAVE_EXISTING_RECEIVER_ADDRESS;
+  const receiverHash = process.env.CASEWEAVE_EXISTING_RECEIVER_TX;
+  const receiverReceipt = await fullReceipt(client, receiverHash);
+  const receiverError = executionError(receiverReceipt);
+  if (receiverError) throw new Error(`existing receiver deployment is not successful: ${receiverError}`);
+  if (receiverReceipt.data?.contract_address?.toLowerCase() !== receiverAddress.toLowerCase()) {
+    throw new Error("existing receiver deployment address did not match the requested address");
+  }
+  assertSourceCode(receiverReceipt, receiverCode, "existing CaseWeaveSettlementReceiver");
+  receiver = {
+    address: receiverAddress,
+    transaction: txRecord(
+      "reuse verified CaseWeaveSettlementReceiver",
+      receiverHash,
+      receiverReceipt,
+      receiverAddress,
+      "deploy",
+    ),
+  };
+} else {
+  receiver = await deploy(client, receiverCode, "deploy CaseWeaveSettlementReceiver");
+}
 const court = await deploy(client, courtCode, "deploy corrected CaseWeaveCourt");
 const configuredCourt = await write(
   client,

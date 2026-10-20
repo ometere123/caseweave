@@ -1,173 +1,128 @@
-# CaseWeave reviewer remediation
+# Final adversarial security remediation
 
-Status: the original remediation below is retained as historical provenance.
-The current milestone deployment and consensus appellate model are recorded in
-the final section; production no longer points at the historical address.
+## Scope and baseline
 
-## Original findings and fixes
+This release addresses the independent audit blockers found at
+`19d8cf71b2572e4082c82d44a8573b153dcc941d`. It preserves the locked
+CaseWeave milestone and does not replace the application.
 
-1. `create_agreement` declared `counterparty: Address`, but the creation
-   page passed the form value as a JavaScript string. `genlayer-js@1.1.8`
-   therefore encoded it with the string calldata tag; GenVM later tried to
-   deserialize it as an address and raised `AttributeError: 'str' object has
-   no attribute 'as_bytes'`.
-2. `resolve_appeal` had no caller authorization. Any wallet could submit an
-   appeal result and change the status of a consensus-created precedent.
+## Findings and fixes
 
-The frontend now uses the runtime `CalldataAddress` class from
-`genlayer-js/types`. `app/lib/address.ts` trims and validates a strict
-20-byte hexadecimal address, rejects zero addresses and self-reference, and
-constructs the class from exactly 20 bytes. `buildCreateAgreementArgs` is the
-single argument builder used by the creation page. Tests confirm the runtime
-class, bytes, and SDK address calldata tag (`0x18`), not merely a TypeScript
-assertion.
+### 1. Transfer-confirmation authenticity
 
-The contract stores `owner` from `gl.message.sender_address` at deployment,
-exposes read-only `get_owner()`, and requires that owner at the start of
-`resolve_appeal`. It then validates the appeal, result, dispute status, and
-linked precedent before changing any state. Resolved appeals cannot be
-resolved again, and there is no owner-transfer method. This owner is an
-explicitly trusted app-level administrative resolver; appeal outcomes are not
-represented as fresh validator-consensus judgments. Initial dispute search,
-evidence verification, and verdict creation remain GenLayer consensus flows.
+The old `confirm_transfer` trusted a syntactically valid caller-supplied child
+hash. It is now permanently fail-closed. Court payouts and appeal-bond
+returns go to a configured `CaseWeaveSettlementReceiver` using an exact-value
+internal message containing transfer ID, beneficiary, amount, and a court-side
+proof commitment. The receiver accepts the callback only from the configured
+court, binds every field exactly, and callbacks the court only after its own
+custody transition. A child EOA withdrawal is reported as
+`withdrawal_submitted`; an owner-supplied hash can record an observed child
+but cannot mark the court transfer paid. Failed receiver messages restore
+custody/accounting through the explicit failure callback.
 
-The shared frontend write helper now waits for SDK finality and checks the
-`genlayer-js@1.1.8` execution fields (`txExecutionResultName` and the leader
-receipt's `execution_result`). A finalized transaction with GenVM failure is
-shown as an error with its hash and StudioNet explorer link. Agreement
-navigation occurs only after the receipt return and an authoritative on-chain
-agreement read match the submitted values.
+The live run rejected fabricated hashes for both the appeal bond and the
+900-GEN judgment transfer, and the before/after transfer reads were equal.
 
-## Corrected deployment
+### 2. Appellate settlement correctness
 
-- Network: `studionet`, chain ID `61999`
-- RPC: <https://studio.genlayer.com/api>
-- Contract: `0x99be950790dEec2F474e5F6E55845eF75D8872a0`
-- Deployment transaction: <https://explorer-studio.genlayer.com/tx/0x99aa01c15af3d8fb9acc1deca9ce79339335f09df26b34b83ae14a983134d412>
-- Owner confirmed by `get_owner()`: `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7`
-- Contract source SHA-256: `8B0140180C121BD7414C3878462DBD04E39CCEB507E749C2E97A2B73A7E764E3`
-- Source commit: `8b958294da5678545ade7f9df478b707ad5562db`
+`settle_judgment` resolves the latest finalized judgment for the dispute and
+passes its canonical role/basis-point remedy through deterministic checks. It
+cannot pay from the superseded first-instance outcome. Direct tests cover
+affirmed, modified/reversed replacement judgments, remand locking, stale
+judgment rejection, and exact recipient/amount selection. The live run settled
+the current `JDG_2` remedy for exactly 900 GEN.
 
-The deployment receipt reached `FINALIZED`, its result was majority agree, and
-the leader GenVM result was `SUCCESS`. The deployed schema contains the
-`counterparty` parameter as `address`, `get_owner` as a read-only method, and
-owner-gated `resolve_appeal`.
+### 3. Bounded amounts and refunds
 
-## Verification results
+The remedy schema is canonical: full release/refund is 10000 basis points;
+partial release is 1–9999 basis points; all non-payout outcomes are zero.
+Partial settlement leaves an explicit creator-controlled remainder refund.
+Resolved agreements reject late funding and late milestone commitment.
+Unallocated deposits, failed transfers, and retries use separately accounted
+balances; duplicate settlement is rejected. The live final invariant was
+`total_accounted_assets=100`, `total_liabilities=100`, `solvent=true`.
 
-Commands run against the pinned local toolchain:
+### 4. Evidence-challenge consensus
 
-```text
-node_modules/.bin/genlayer.cmd --version                       0.39.1
-genlayer-js (root and app)                                    1.1.8
-python -m unittest discover -v                                 6 passed
-gltest ... test/test_caseweave_direct.py -v -s                2 passed
-npm run test:frontend                                          16 passed
-app/node_modules/.bin/tsc.cmd --noEmit -p app/tsconfig.json    passed
-npm run lint --prefix app                                      passed
-npm run build --prefix app                                     passed
-GENVM_VERSION=v0.2.16 genvm-lint check contracts/caseweave.py  passed
-```
+`resolve_evidence_challenge` independently refetches committed original and
+counter-evidence, recomputes hashes, and compares finding, authenticity,
+relevance, credibility, identities, and hashes. Direct malicious-leader tests
+show unsupported semantic conclusions fail without state mutation.
 
-`genvm-lint==0.11.0` reported only the contract's pre-existing bare
-`Exception` warnings; lint, schema extraction, and semantic validation passed.
-The linter's default newest cached bundle did not contain this contract's
-existing `py-genlayer` hash, so compatibility was verified with the cached
-`v0.2.16` bundle via `GENVM_VERSION=v0.2.16`; the contract header and runner
-hash were not changed. The direct execution suite uses the installed
-`genlayer-test==0.29.2` runtime.
+### 5. Frozen evidence and procedural finality
 
-## Genuine StudioNet workflow
+Frozen evidence rejects verification, mutation, and challenges. Pending
+challenges block verdict and finalization. The verdict snapshot now includes
+the authenticated delivery-proof facts and its commitment hash. Appellate
+review reads that exact frozen snapshot plus separately versioned verified
+appeal evidence. Settlement requires a finalized, closed current judgment;
+there is no post-payment appeal reversal path.
 
-All successful transactions below were `FINALIZED` with GenVM `SUCCESS`.
-The object IDs and states were read back from the deployed contract.
+### 6. GitHub source authenticity
 
-| Method | Object/state | Explorer transaction |
-|---|---|---|
-| `create_agreement` | `AGR_1`; creator and counterparty stored as the two party wallets | <https://explorer-studio.genlayer.com/tx/0x952a9b26e9b7e4bca4355e417c59a83a2dd432acb372f5a4217bd9bbeb07edc6> |
-| `accept_agreement` | `AGR_1: pending_acceptance -> active` | <https://explorer-studio.genlayer.com/tx/0x82229107931dd9088ae017c69070011a9e794fbfd24e9b430ce040544c65c31a> |
-| `file_dispute` | `DIS_1: awaiting_response` | <https://explorer-studio.genlayer.com/tx/0x652ab929491d5d6450bdbbe6eccd4efb2369bab9430de8d640d920b0be0bf09e> |
-| `submit_response` | `DIS_1: awaiting_precedent_search` | <https://explorer-studio.genlayer.com/tx/0x867c46d563d38488e9ce3f402104d3bd00275a1685db658ab8c3c7e6bb73c428> |
-| `verify_evidence_url` | `verified`, HTTP 200, content hash `c51f97ba5175f0a4b975f08e67833d8d4e377b60b100e120ed1d6236c399a6fc` | <https://explorer-studio.genlayer.com/tx/0xda9e21daffed42a8be5ef5e87f49eed007bca000967be9af028eb2e75b49c9da> |
-| `request_precedent_search` | `DIS_1: awaiting_verdict` | <https://explorer-studio.genlayer.com/tx/0x37a289da16f695ef30ff06bd3bc4b0f6fc438dc76532bfe416210ba5eb76a50f> |
-| `request_verdict` | AI consensus: `revision_required`, confidence 74; `DIS_1: verdict_reached` | <https://explorer-studio.genlayer.com/tx/0x821459b52f9822faa0e830b036cddf223101dd73a41bddc6f8a0c3881b55d446> |
-| `finalize_precedent` | `CASE_1`; `DIS_1: finalized` | <https://explorer-studio.genlayer.com/tx/0x21b183d9d4badaf5a1c7728efceb58d28dfe0a3dd9be2c5d2f1e291c60aaf4b6> |
-| `file_appeal` | `APP_1: under_review`; `DIS_1: under_appeal` | <https://explorer-studio.genlayer.com/tx/0x4f365ba23ede9d4127b0160fe4dc07cd700ce753676b90c062659b1bd1bba35c> |
-| `resolve_appeal` by unrelated third wallet | Expected `ERROR`: `only the owner may resolve appeals`; appeal, dispute, and precedent reads were unchanged | <https://explorer-studio.genlayer.com/tx/0xf3420dee8c597fe72012c8aca02612955bf555a7248593f18247dada50347c10> |
-| `resolve_appeal` by owner | `APP_1: resolved`, result `overturned_precedent`; `CASE_1: overturned` | <https://explorer-studio.genlayer.com/tx/0x687616edced6a55483960167c695c891d17fc3ec14bb7a385876ba78c7ab2fff> |
+Delivery verification fetches the authoritative GitHub commit API, validates
+the full commit SHA and repository identity, and compares exact
+`files[].filename` membership against the committed scope. The raw-file URL is
+only the content whose bytes are hashed; it is not treated as proof of commit
+membership. Unchanged-file substitution is covered by Direct Mode tests.
 
-Evidence was fetched from the immutable URL
-<https://raw.githubusercontent.com/ometere123/caseweave/3916d4a/README.md>.
-The recorded on-chain content hash proves the validator fetch was part of the
-successful evidence-verification transaction; the evidence was not mocked in
-this run. The resulting `CASE_1` is available through the frontend's cases
-route at `/cases/CASE_1` when connected to the corrected deployment.
+### 7. Judgment-consumer trust
 
-## Historical production snapshot (superseded)
+The consumer binds the trusted court once in its constructor. `consume_judgment`
+requires the court address inside the judgment, current finalized status,
+agreement/dispute scope, version, and supersession invariants. Storage keys are
+namespaced by court identity and judgment ID; arbitrary caller-supplied court
+addresses cannot impersonate the court.
 
-This was the production snapshot for the original remediation deployment. It
-is retained to preserve reviewer provenance and is superseded by the current
-milestone deployment in the section below:
+## Final deployment
 
-- Deployment: <https://vercel.com/delealufejoel-4184s-projects/caseweave/HJadkTVa48pmnMqFEn8T1PzZvrt4>
-- Live alias: <https://caseweave.vercel.app>
-- Deployment ID: `dpl_HJadkTVa48pmnMqFEn8T1PzZvrt4`
-- Build source: `9527876ad40579be71daf3bc3b29fb37bfb4017e`
-- Live `/agreements/new` response: HTTP 200
-- Live client chunk: `/_next/static/chunks/0gqdo_07n01tk.js` contains the
-  corrected contract address, strict address validation, and the compiled
-  `Uint8Array.from({ length: 20 }, ...)` runtime `CalldataAddress`
-  construction used by the create-agreement builder.
+- Network: `studionet`, chain `61999`
+- Court: `0x3BA8098653902c5A5daf08f26A3759fB06C57a2A`
+- Receiver: `0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f`
+- Consumer: `0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211`
+- Owner: `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7`
+- Court deploy: [0x6794a8ffc05660e319b679d63ad78c8ab79ec703a6b8011bdf604f80944333ef](https://explorer-studio.genlayer.com/tx/0x6794a8ffc05660e319b679d63ad78c8ab79ec703a6b8011bdf604f80944333ef)
+- Court source SHA-256: `4793E610064B36E68BFE551D1C06A2E7B26ECBDE174CE94066ABD065E8EF08F8`
+- Receiver deploy: [0x187c4554707c4ed3c7dc13191ff35e07be725aeb4a13ad4351cad00cb27bf866](https://explorer-studio.genlayer.com/tx/0x187c4554707c4ed3c7dc13191ff35e07be725aeb4a13ad4351cad00cb27bf866)
+- Consumer deploy: [0x01056fb613afee39ecff9a161df8ec2048d4b95d7ea4247668164ce248f7f805](https://explorer-studio.genlayer.com/tx/0x01056fb613afee39ecff9a161df8ec2048d4b95d7ea4247668164ce248f7f805)
 
-No private keys, keystores, or credentials are stored in the repository.
+All deployment and configuration receipts were final with GenVM `SUCCESS`;
+the deployment script compared receipt code hashes to the committed source
+bytes.
 
-## Historical resubmission response (superseded)
+## Test and live proof
 
-> CaseWeave has been remediated and redeployed to StudioNet (chain 61999).
-> The creation path now constructs a runtime `CalldataAddress`, and tests
-> verify the SDK address calldata tag and 20-byte payload. Appeal resolution is
-> owner-authorized on-chain, validates the linked finalized precedent before
-> mutation, rejects duplicate resolution, and has no owner-transfer path. The
-> corrected contract is `0x99be950790dEec2F474e5F6E55845eF75D8872a0`.
-> A real StudioNet run created `AGR_1`, accepted it, progressed through
-> evidence fetching, precedent search, AI consensus, and `CASE_1` finalization,
-> then filed `APP_1`; an unrelated wallet was rejected and the verified owner
-> resolved the appeal. Explorer links and state/hash evidence are recorded in
-> this report.
+- Direct Mode: **16 passed, 0 failed**.
+- Frontend Vitest: **20 passed, 0 failed**.
+- TypeScript, ESLint, production build: **passed**.
+- Playwright local/production critical workflows: **2 passed each**.
+- StudioNet: **1 test passed, 32 finalized transactions**.
 
-## Current milestone supersession
+Canonical evidence:
+[live JSON](test-evidence/studionet-remediation-final-20261020.json),
+[full transaction table](DEPLOYMENT.md), and
+[reviewer walkthrough](MILESTONE_REVIEW_EVIDENCE.md).
 
-The current milestone preserves the address-serialization fix and all
-execution-result handling, but supersedes the historical owner-discretionary
-merits action described above. The final court is
-`0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a`; the historical
-`0x99be950790dEec2F474e5F6E55845eF75D8872a0` is not an active frontend
-target.
+The live run created `AGR_1`, `PROOF_1`, `DIS_1`, `CASE_1`, `APP_1`, and
+`JDG_2`; verified commit-pinned evidence; resolved a challenge; produced an
+AI-consensus verdict; performed independent appellate consensus; consumed the
+final judgment from the second contract; reconciled trusted custody; and
+rejected unauthorized appeal mutation, fabricated child hashes, and duplicate
+settlement. Production target is <https://caseweave.vercel.app>; its final
+deployment must be independently checked after the release push.
 
-`resolve_appeal` now fails closed and cannot select a merits result. A
-legitimate appeal is resolved only through `request_appeal_review`, which
-independently evaluates the frozen evidence snapshot and writes a versioned
-judgment after substantive validator consensus. The owner remains the
-deployment identity for the narrowly scoped compatibility guard and for
-non-merits operational actions; it cannot override the appellate result.
+## Reviewer resubmission response
 
-The final milestone deployment details, source hash, consumer deployment,
-production verification, 24-transaction StudioNet run, unchanged-state
-unauthorized rejection, appellate result, transfer reconciliation, and
-reviewer walkthrough are in [DEPLOYMENT.md](DEPLOYMENT.md),
-[MILESTONE_REVIEW_EVIDENCE.md](MILESTONE_REVIEW_EVIDENCE.md), and
-[TEST_EVIDENCE.md](TEST_EVIDENCE.md).
-
-## Current reviewer resubmission response
-
-> CaseWeave’s Autonomous Contract Justice milestone is complete on StudioNet
-> chain 61999. Runtime CalldataAddress conversion is tested and live in the
-> creation flow. Evidence, proof-of-performance, precedent, and appellate
-> outcomes are independently validated and fail closed; the old resolve_appeal
-> path cannot choose merits, while request_appeal_review requires substantive
-> validator consensus. Final court: 0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a;
-> consumer: 0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71. A real run created AGR_6,
-> DIS_5, CASE_3, APP_3 and JDG_6, rejected an unrelated resolver with unchanged
-> state, reconciled funded GEN transfers, and consumed the finalized judgment.
-> Full receipts, hashes, state reads and production verification are in the
-> linked evidence report.
+> CaseWeave’s final adversarial remediation is deployed to StudioNet chain
+> 61999. Fake child-hash confirmations are disabled; payouts require the
+> configured receiver’s exact-value custody callback and finalized child
+> evidence. Settlement uses the current appellate judgment and bounded remedy,
+> late funding is rejected, evidence snapshots are immutable, GitHub changed
+> files are checked through authoritative commit metadata, and the judgment
+> consumer is court-bound. A real run created AGR_1/PROOF_1/DIS_1/CASE_1/APP_1,
+> produced JDG_2 through appellate consensus, consumed it cross-contract, and
+> reconciled 900 GEN custody. Unauthorized appeal mutation, fake hashes, and
+> duplicate settlement all failed with unchanged state. Full receipts, hashes,
+> state reads, and source SHA-256 are in DEPLOYMENT.md and the machine-readable
+> StudioNet evidence record.

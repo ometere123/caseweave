@@ -58,9 +58,13 @@ merits result.
    the consensus result.
 6. Native GEN deposits, milestone commitments, appeal bonds, pending child
    transfers and settled balances are separately accounted. Solvency is checked
-   before irreversible payout; a transfer is delivered only after the recipient
-   confirms the finalized child transaction hash. Failed child messages become
-   explicit failed balances that can be reconciled.
+   before payout. Court settlement is considered custodied only after the
+   configured receiver accepts the exact parent transfer fields and sends a
+   finalized protocol callback; a beneficiary EOA withdrawal remains
+   `withdrawal_submitted` and stores an externally observed child hash because
+   the pinned GenVM runtime cannot query an external receipt. Failed value
+   children restore custody only through `__on_errored_message__`; no caller
+   supplied hash can mark a court transfer delivered.
 7. `CaseWeaveJudgmentConsumer` consumes only the current, finalized, correctly
    scoped judgment with the expected version and evidence snapshot. Superseded,
    unresolved or stale judgments are rejected.

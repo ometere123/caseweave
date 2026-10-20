@@ -16,8 +16,23 @@ test("creation form rejects malformed calldata before any navigation or write", 
       "caseweave-wallet",
       JSON.stringify({ state: { address: "0x1111111111111111111111111111111111111111" }, version: 0 }),
     );
+    Object.defineProperty(window, "ethereum", {
+      configurable: true,
+      value: {
+        request: async ({ method }: { method: string }) =>
+          method === "eth_accounts" || method === "eth_requestAccounts"
+            ? ["0x1111111111111111111111111111111111111111"]
+            : null,
+        on: () => undefined,
+        removeListener: () => undefined,
+      },
+    });
   });
   await page.goto("/agreements/new", { waitUntil: "domcontentloaded" });
+  const connectButton = page.getByRole("button", { name: "Connect Wallet" });
+  if (await connectButton.isVisible().catch(() => false)) {
+    await connectButton.click();
+  }
   await expect(page.getByRole("button", { name: "Create Agreement" })).toBeVisible();
 
   await page.getByLabel("Agreement title").fill("Browser calldata proof");

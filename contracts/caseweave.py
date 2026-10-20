@@ -931,8 +931,8 @@ class CaseWeaveCourt(gl.Contract):
     @gl.public.write.payable
     def fund_agreement(self, agreement_id: str, expected_amount: int) -> dict:
         agreement = self.agreements[agreement_id]
-        if agreement.status not in ("active", "disputed", "resolved"):
-            raise gl.vm.UserError("agreement must be active before funding")
+        if agreement.status != "active":
+            raise gl.vm.UserError("agreement no longer accepts new funding")
         if gl.message.sender_address != agreement.creator:
             raise gl.vm.UserError("only the creator may fund an agreement")
         amount = int(gl.message.value)
@@ -967,6 +967,8 @@ class CaseWeaveCourt(gl.Contract):
     @gl.public.write
     def fund_milestone(self, agreement_id: str, milestone_id: str) -> None:
         agreement = self.agreements[agreement_id]
+        if agreement.status != "active":
+            raise gl.vm.UserError("agreement no longer accepts new milestone funding")
         if gl.message.sender_address != agreement.creator:
             raise gl.vm.UserError("only the creator may allocate milestone funds")
         if milestone_id not in self.milestones:
@@ -1899,6 +1901,9 @@ directly relevant to the dispute claim. Return only JSON matching:
                 ]
                 if len(active_appeals) != 1:
                     raise gl.vm.UserError("appeal evidence must belong to one active appeal")
+                active_appeal = self.appeals[active_appeals[0]]
+                self.evidence_metadata[counter_key].previous_version_key = active_appeal.snapshot_id
+                self.evidence_metadata[counter_key].version = u256(2)
                 appeal_keys = json.loads(self.appeal_evidence_json.get(active_appeals[0], "[]"))
                 appeal_keys.append(counter_key)
                 self.appeal_evidence_json[active_appeals[0]] = json.dumps(appeal_keys)
@@ -2289,10 +2294,24 @@ Do not include markdown or private reasoning.
                 "at least one verified evidence item is required before a verdict can be requested"
             )
 
+        delivery_proofs = []
+        for proof_id in json.loads(self.dispute_proofs_json.get(dispute_id, "[]")):
+            if proof_id not in self.delivery_proofs:
+                raise gl.vm.UserError("dispute references a missing delivery proof")
+            proof = self.delivery_proofs[proof_id]
+            if proof.status != "verified" or not proof.content_hash:
+                raise gl.vm.UserError("every delivery proof must be independently verified")
+            delivery_proofs.append(self._delivery_proof_to_dict(proof))
+
         snapshot_payload = {
             "dispute_id": dispute_id,
             "claimant": claimant_evidence,
             "respondent": respondent_evidence,
+            # Delivery-proof source facts are already authenticated by the
+            # dedicated GitHub adapter and consensus assessment. Include them
+            # in the immutable verdict snapshot so verdict validators cannot
+            # silently reduce a proven commitment to an untrusted URL claim.
+            "delivery_proofs": delivery_proofs,
             "precedent_search": relevant_cases,
         }
         snapshot_hash = self._commitment_hash(snapshot_payload)
@@ -2339,6 +2358,10 @@ Respondent response summary:
 
 Respondent evidence (fetched and verified by GenLayer validators, JSON):
 {json.dumps(respondent_evidence)}
+
+Verified delivery-proof source facts (authenticated by the dedicated
+source adapter and frozen into this snapshot, JSON):
+{json.dumps(delivery_proofs)}
 
 Relevant prior precedent cases (JSON):
 {json.dumps(relevant_cases)}
@@ -2812,6 +2835,7 @@ The requested outcome is an input label, not a verdict category.
         snapshot_items = list(frozen_payload.get("claimant", [])) + list(
             frozen_payload.get("respondent", [])
         )
+        snapshot_delivery_proofs = list(frozen_payload.get("delivery_proofs", []))
         new_evidence_keys = json.loads(self.appeal_evidence_json.get(appeal_id, "[]"))
         new_evidence_items = []
         for evidence_key in new_evidence_keys:
@@ -2852,6 +2876,7 @@ requested_change={requested_change}
 original_verdict={original_verdict}
 original_remedy={json.dumps(original_remedy, sort_keys=True)}
 immutable_evidence_snapshot={json.dumps(snapshot_items)}
+authenticated_delivery_proofs_in_snapshot={json.dumps(snapshot_delivery_proofs)}
 authorized_new_evidence={json.dumps(new_evidence_local)}
 
 Return only JSON:

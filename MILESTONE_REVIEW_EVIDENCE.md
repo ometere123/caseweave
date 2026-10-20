@@ -1,100 +1,76 @@
-# CaseWeave milestone reviewer evidence
+# CaseWeave reviewer walkthrough
 
-This walkthrough is reproducible against StudioNet chain 61999. The canonical
-machine-readable record is
-[test-evidence/studionet-e2e.json](test-evidence/studionet-e2e.json), and the
-complete 24-transaction table is in [DEPLOYMENT.md](DEPLOYMENT.md). No mock
-receipt or fabricated object ID is used in the live evidence.
+This is the concise, independently reproducible proof for the final
+adversarial remediation on StudioNet chain `61999`. The full machine-readable
+record is
+[`test-evidence/studionet-remediation-final-20261020.json`](test-evidence/studionet-remediation-final-20261020.json);
+the complete hash table is in [DEPLOYMENT.md](DEPLOYMENT.md).
 
-## Final deployed artifacts
+## Deployed artifacts
 
-- CaseWeaveCourt: 0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a
-- CaseWeaveJudgmentConsumer: 0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71
-- Court deployment: [0x5c80f28523c9129ccd89dda0b6fa4df7fae768ee15cf9e946e90f29e4779aa40](https://explorer-studio.genlayer.com/tx/0x5c80f28523c9129ccd89dda0b6fa4df7fae768ee15cf9e946e90f29e4779aa40)
-- Consumer deployment: [0x390d9bf3ad87da7a24a3ba45e5d4320e807088a972437756ef2be5eba495fce3](https://explorer-studio.genlayer.com/tx/0x390d9bf3ad87da7a24a3ba45e5d4320e807088a972437756ef2be5eba495fce3)
-- Owner from get_owner(): 0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7
-- Court source SHA-256: AD2E8663D1021E163E301557BD5BBCB96AC64FFF77A9B229D05F8FBDDFD3D6D4
-- Court deployment source commit: b528a8ed178b417e718116935d30808e54392761
+- Court: `0x3BA8098653902c5A5daf08f26A3759fB06C57a2A`
+- Receiver: `0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f`
+- Judgment consumer: `0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211`
+- Owner: `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7`
+- Court deployment: [0x6794a8ffc05660e319b679d63ad78c8ab79ec703a6b8011bdf604f80944333ef](https://explorer-studio.genlayer.com/tx/0x6794a8ffc05660e319b679d63ad78c8ab79ec703a6b8011bdf604f80944333ef)
+- Court SHA-256: `4793E610064B36E68BFE551D1C06A2E7B26ECBDE174CE94066ABD065E8EF08F8`
+- Consumer deployment: [0x01056fb613afee39ecff9a161df8ec2048d4b95d7ea4247668164ce248f7f805](https://explorer-studio.genlayer.com/tx/0x01056fb613afee39ecff9a161df8ec2048d4b95d7ea4247668164ce248f7f805)
 
-Both deployments were finalized with majority agreement (result=6) and
-leader GenVM SUCCESS.
+## Reproduce the proof
 
-## Reviewer walkthrough
+1. The frontend creation builder calls the runtime SDK `CalldataAddress`
+   constructor. It trims, validates exactly 20 bytes, rejects malformed,
+   zero, and self addresses, and the frontend test checks the SDK address tag.
+2. The live builder created `AGR_1`; the read-back stored the two distinct
+   party addresses. It was accepted, funded with 1000 GEN, and allocated a
+   900 GEN milestone.
+3. `verify_delivery_proof` fetched the commit-pinned raw file and, through
+   its source adapter, independently fetched GitHub commit metadata. The
+   stored proof is `satisfied`; its facts match repository identity, full SHA
+   `abd9e03ab772e9ffddc35c1542c6e013470a93d5`, and changed file
+   `docs/evidence/caseweave-counter-facts.txt`.
+4. A real dispute `DIS_1` was answered, evidence was fetched and hashed, a
+   challenge was independently resolved, and the pending-challenge gate was
+   satisfied before verdict.
+5. `request_verdict` produced `claimant_wins`. Crucially, the immutable
+   verdict snapshot includes the already authenticated delivery-proof facts,
+   not just a user URL or LLM completion claim. `finalize_precedent` created
+   `CASE_1` and `JDG_1`.
+6. `APP_1` was filed with a 1-GEN bond. The third wallet's legacy
+   `resolve_appeal` call finalized with GenVM `ERROR` and unchanged state:
+   [rejected transaction](https://explorer-studio.genlayer.com/tx/0x7d685d0d17d5752639c0065c22717dd002a23993c59cc813d8c42b0b4ac47d1e).
+   No wallet can select a merits result through that compatibility method.
+7. The owner submitted `request_appeal_review`; independent appellate
+   consensus produced `JDG_2`, version 2, result `affirmed`, outcome
+   `claimant_wins`, and the same immutable snapshot hash. The owner did not
+   choose the result.
+8. The trusted consumer accepted only this court's finalized current judgment
+   and stored `AGR_1`, `DIS_1`, `CASE_1`, `JDG_2`, version 2, and the court
+   identity.
+9. Settlement created `TR_2` for exactly 900 GEN from committed funds. The
+   configured receiver emitted the exact-value custody callback only after
+   the internal custody child finalized. Fabricated hashes were rejected:
+   [bond](https://explorer-studio.genlayer.com/tx/0x2f4aa2ced672cbedb82ad5ab94fcd0611b04bc7a543246c5a00e1b5a8f29bf69)
+   and [settlement](https://explorer-studio.genlayer.com/tx/0x8904f983d7fb737d6d8a3bad9e564d77379dcc235a202b4cc0cb4688364b59d8).
+10. Final reads show `committed=0`, `pending_transfer=0`, `settled=901`,
+    `total_accounted_assets=100`, `total_liabilities=100`, `solvent=true`.
+    The beneficiary EOA withdrawal remains `withdrawal_submitted`; the
+    receiver does not falsely mark external delivery as paid.
 
-1. Inspect the creation path in app/lib/address.ts and app/lib/contract.ts.
-   The builder trims, rejects malformed/zero/self addresses, creates exactly
-   20 bytes, and instantiates the SDK runtime CalldataAddress. Frontend tests
-   prove the SDK address tag rather than a string tag.
-2. On the live run, create_technical_agreement returned AGR_6, and the
-   authoritative read stored creator
-   0xac3AC69dC0Bde389256dD6748C75817ead9286D9 and counterparty
-   0xA7EeAE0E93793e3146Cb14b0700251B8b0EBADFB. The creation transaction is
-   [0x8134c17a5341855d16fff7a9de601c2cf89104ead134008fa8c520a8dece9036](https://explorer-studio.genlayer.com/tx/0x8134c17a5341855d16fff7a9de601c2cf89104ead134008fa8c520a8dece9036).
-3. accept_agreement, fund_agreement, fund_milestone, submit_deliverable, and
-   register_delivery_proof progressed the agreement to a funded technical
-   delivery case. The proof is PROOF_6.
-4. verify_delivery_proof independently retrieved the committed GitHub
-   repository, commit, changed files, PR/deployment facts, and immutable raw
-   delivery record. The response contains per-obligation findings and treats
-   CI as supporting context rather than proof. Transaction:
-   [0x7ed2c3ba7a74d7b0d0c4f995b869f347e1ddb28e6e81b6cf4056c91aeb2b3ff2](https://explorer-studio.genlayer.com/tx/0x7ed2c3ba7a74d7b0d0c4f995b869f347e1ddb28e6e81b6cf4056c91aeb2b3ff2).
-5. DIS_5 was filed, answered, challenged, and challenge-resolved. Both
-   evidence rails were independently fetched; the respondent counter-evidence
-   had HTTP 200 and hash
-   7d1cf5c5bf023039b2a7b40fbac09e1c8c543cafb0e568f6996146b3c193b338.
-6. request_precedent_search, request_verdict, and finalize_precedent produced
-   CASE_3 and first-instance judgment JDG_5. The frozen snapshot is
-   SNAPSHOT_DIS_5_9 with hash
-   40c361583c6e61d92b9bf2f0299c38e2c3ee133bc9ec18a87b9d2cba54ac9e3c.
-7. APP_3 was filed with a one-GEN bond. A third wallet called the legacy
-   resolve_appeal method. The transaction finalized with GenVM ERROR and
-   rollback payload “only the owner may access the administrative appeal
-   guard”; before/after reads were unchanged:
-   [0x28bcbea0e38df8b812524a4e70b5d38cfc2a85f9b8965f35af2a089c66d9549d](https://explorer-studio.genlayer.com/tx/0x28bcbea0e38df8b812524a4e70b5d38cfc2a85f9b8965f35af2a089c66d9549d).
-8. The owner could not choose a merits result through that compatibility
-   method. The owner submitted request_appeal_review, which independently
-   assessed the frozen evidence and produced JDG_6, version 2, result
-   affirmed:
-   [0xb82b61a6fb224921e9bd140f966ad4aa4f37c715acd35be705f304854a668c96](https://explorer-studio.genlayer.com/tx/0xb82b61a6fb224921e9bd140f966ad4aa4f37c715acd35be705f304854a668c96).
-9. The consumer contract accepted only the finalized current judgment and
-   recorded AGR_6, DIS_5, CASE_3, JDG_6, version 2:
-   [0x949a322a1f1ad6a35622432887b20cba4f9e5dcf5ad6a6c688ae751c8e393304](https://explorer-studio.genlayer.com/tx/0x949a322a1f1ad6a35622432887b20cba4f9e5dcf5ad6a6c688ae751c8e393304).
-10. The appeal bond and judgment settlement were released as tracked native
-    child transfers and confirmed only after child finality. The two
-    confirmation transactions are
-    [0xc510a252459b63ae44bc257e3811a27c300ced3e49a2cc5dfedaecbf77c7f499](https://explorer-studio.genlayer.com/tx/0xc510a252459b63ae44bc257e3811a27c300ced3e49a2cc5dfedaecbf77c7f499) and
-    [0x29dfadb00f03d66dadb513da3f0d24f5bda8a75b8677ce267358629713320958](https://explorer-studio.genlayer.com/tx/0x29dfadb00f03d66dadb513da3f0d24f5bda8a75b8677ce267358629713320958).
+## Reviewer conclusions
 
-## Final state proof
+- Fake child hashes cannot mark transfers delivered or reduce liabilities.
+- Settlement uses the current finalized judgment and its canonical remedy.
+- Partial/revision remedies are bounded; late funding on resolved agreements
+  is rejected; remainder refunds and failed-transfer reconciliation are
+  explicit.
+- Historical evidence is frozen and appeals use the committed snapshot plus
+  separately versioned verified evidence.
+- GitHub authenticity uses authoritative commit metadata and changed-file
+  membership, not a raw-file existence check.
+- The judgment consumer is bound to the trusted court identity and
+  court-scoped judgment namespace.
 
-The final read for AGR_6 is resolved; DIS_5 is finalized; APP_3 is resolved;
-CASE_3 is active public precedent; and JDG_6 is the current version 2 judgment
-with appellate status closed. Escrow reads show:
-
-    actual_deposited=1001
-    available=100
-    committed=0
-    reserved=0
-    pending_transfer=0
-    appeal_bond_balance=0
-    settled=901
-    failed_transfer_balance=0
-    contract_balance=5101
-    total_accounted_assets=5101
-    total_liabilities=5101
-    solvent=true
-
-## Reproduce
-
-    $env:GENVM_VERSION='v0.2.16'
-    python -m unittest discover -v
-    gltest.exe test/test_caseweave_direct.py test/test_caseweave_milestone_direct.py -v -s
-    npm run test:frontend
-    npm run test:studionet
-    $env:PLAYWRIGHT_BASE_URL='https://caseweave.vercel.app'
-    npm run test:playwright
-
-The production alias is https://caseweave.vercel.app. Its live agreement
-creation bundle contains the final court address and compiled runtime address
-conversion; the old court address is not present. Local encrypted keystore
-inputs are required for the live harness and are not committed.
+Production URL: <https://caseweave.vercel.app>. The final source push must be
+verified on the production alias for HTTP 200, the new address in the client
+bundle, and the compiled runtime calldata conversion.

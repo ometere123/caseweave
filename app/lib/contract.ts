@@ -3,15 +3,15 @@ import { assertDistinctCounterparty } from "./address";
 
 export const CASEWEAVE_CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS ??
-    "0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a") as `0x${string}`;
+    "0x3BA8098653902c5A5daf08f26A3759fB06C57a2A") as `0x${string}`;
 
 export const CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS ??
-    "0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71") as `0x${string}` | "";
+    "0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211") as `0x${string}` | "";
 
 export const CASEWEAVE_SETTLEMENT_RECEIVER_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_SETTLEMENT_RECEIVER_ADDRESS ??
-    "") as `0x${string}` | "";
+    "0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f") as `0x${string}` | "";
 
 export const EVIDENCE_STATUSES = [
   "unverified",

@@ -23,16 +23,16 @@ import { resolveCreatedAgreementId } from "../../app/lib/create-agreement";
 
 const CONTRACT_ADDRESS =
   process.env.CASEWEAVE_E2E_CONTRACT_ADDRESS ??
-  "0x36b5007c35817Bb39026D7C9916D99b363858B7d";
+  "0x3BA8098653902c5A5daf08f26A3759fB06C57a2A";
 const RECEIVER_ADDRESS =
   process.env.CASEWEAVE_E2E_RECEIVER_ADDRESS ??
-  "0x56bCE3A36FCd1b9B6a259213A99f2243992a8351";
+  "0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f";
 const CONSUMER_ADDRESS =
   process.env.CASEWEAVE_E2E_CONSUMER_ADDRESS ??
-  "0xA96bE7dAbEb4c3015c10beD30cB4e01e3A9f248d";
+  "0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211";
 const EVIDENCE_COMMIT =
   process.env.CASEWEAVE_E2E_COMMIT_SHA ??
-  "2664f0b94bc80b2b63fbdd2ba9dab62b98cc4698";
+  "abd9e03ab772e9ffddc35c1542c6e013470a93d5";
 const EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_EVIDENCE_URL ??
   `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-counter-facts.txt`;
@@ -450,10 +450,7 @@ it(
         repositoryIdentity: "ometere123/caseweave",
         commitSha,
         pullRequest: { number: 1, head_sha: commitSha, merged: true },
-        changedFiles: [
-          "docs/evidence/caseweave-counter-facts.txt",
-          "test/frontend/studionet_e2e.test.ts",
-        ],
+        changedFiles: ["docs/evidence/caseweave-counter-facts.txt"],
         ciResults: {
           commit_sha: commitSha,
           conclusion: "success",
@@ -594,7 +591,7 @@ it(
           0,
           "authenticity",
           "The respondent's delivery record must be independently re-fetched before this assertion is admitted.",
-          "",
+          EVIDENCE_URL,
         ],
         evidence,
       );
@@ -604,6 +601,15 @@ it(
           await readCase(partyAClient, "list_evidence_challenges", [disputeId]),
           "list_evidence_challenges",
         );
+      await send(
+        "verify immutable counter-evidence for the challenge",
+        partyBClient,
+        partyB,
+        CONTRACT_ADDRESS,
+        "verify_evidence_url",
+        [disputeId, "claimant", 2],
+        evidence,
+      );
       await send(
         "resolve challenged evidence by independent evidence-court consensus",
         partyAClient,
@@ -886,7 +892,19 @@ it(
       const transferId =
         extractTransactionReturnString(settlement.receipt) ??
         lastId(await readCase(partyAClient, "list_transfers", [agreementId]), "list_transfers");
+      const settlementReceiverChild = await waitForSuccessfulChild(
+        partyAClient,
+        settlement.hash,
+        "judgment settlement custody message",
+      );
+      const settlementCallbackChild = await waitForSuccessfulChild(
+        partyAClient,
+        settlementReceiverChild.childHash,
+        "judgment settlement custody callback",
+      );
       const transferBeforeCustody = await readCase(partyAClient, "get_transfer", [transferId]);
+      const transferAfterCustody = await readCase(partyAClient, "get_transfer", [transferId]);
+      const receiverCustody = await readReceiver(partyAClient, "get_custody", [transferId]);
       const fakeSettlement = await send(
         "reject fabricated settlement child hash",
         thirdClient,
@@ -899,20 +917,8 @@ it(
         false,
       );
       const transferAfterFake = await readCase(partyAClient, "get_transfer", [transferId]);
+      expect(transferBeforeCustody.status).toBe("custodied");
       expect(transferAfterFake).toEqual(transferBeforeCustody);
-
-      const settlementReceiverChild = await waitForSuccessfulChild(
-        partyAClient,
-        settlement.hash,
-        "judgment settlement custody message",
-      );
-      const settlementCallbackChild = await waitForSuccessfulChild(
-        partyAClient,
-        settlementReceiverChild.childHash,
-        "judgment settlement custody callback",
-      );
-      const transferAfterCustody = await readCase(partyAClient, "get_transfer", [transferId]);
-      const receiverCustody = await readReceiver(partyAClient, "get_custody", [transferId]);
       expect(transferAfterCustody.status).toBe("custodied");
       expect(receiverCustody.status).toBe("custodied");
 

@@ -52,8 +52,8 @@ Superseded remediation deployment:
 
 ## v4/v5 - Autonomous Contract Justice Protocol milestone
 
-Baseline main commit:
-`ff4df65945c068d0d3690aea8f2b256abcbbd290`.
+Adversarial-remediation baseline main commit:
+`19d8cf71b2572e4082c82d44a8573b153dcc941d`.
 
 The completed milestone adds the eight integrated capability areas described
 in [MILESTONE_SPEC.md](MILESTONE_SPEC.md): structured proof-of-performance
@@ -63,17 +63,22 @@ versioned lineage; consensus appellate review; native GEN escrow and child
 transfer reconciliation; the CaseWeaveJudgmentConsumer; and a complete
 wallet-connected courtroom/audit UX.
 
-The final court deployment is
-`0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a`, with source commit
-`b528a8ed178b417e718116935d30808e54392761` and source SHA-256
-`AD2E8663D1021E163E301557BD5BBCB96AC64FFF77A9B229D05F8FBDDFD3D6D4`.
-The second Intelligent Contract is
-`0x8e7C58fECA7E5F3ABf62Fd5df83C415d78BCEf71`.
+The historical milestone deployment is retained in the deployment record. The
+final adversarial-remediation deployment supersedes it with court
+`0x3BA8098653902c5A5daf08f26A3759fB06C57a2A`, custody receiver
+`0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f`, and trusted judgment consumer
+`0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211`; its source hashes and
+configuration transactions are recorded in [DEPLOYMENT.md](DEPLOYMENT.md).
 
-The live StudioNet run created AGR_6, PROOF_6, DIS_5, CASE_3, APP_3, and
-judgment JDG_6 through evidence retrieval, challenge resolution, precedent
-search, first-instance consensus, independent appellate consensus, judgment
-consumption, native child transfers, and final settlement. See
-[DEPLOYMENT.md](DEPLOYMENT.md) and
-[MILESTONE_REVIEW_EVIDENCE.md](MILESTONE_REVIEW_EVIDENCE.md) for the
-immutable receipts and state reads.
+The security release adds independently reconciled custody callbacks, bounded
+current-judgment remedies, immutable evidence snapshots and versioned appeal
+evidence, authoritative GitHub changed-file checks, semantic evidence-challenge
+consensus, and trusted-court identity binding for the consumer. Its fresh
+StudioNet run is recorded in `test-evidence/` and the final reviewer evidence
+report.
+
+The final run created `AGR_1`, `PROOF_1`, `DIS_1`, `CASE_1`, `APP_1`, and
+current judgment `JDG_2`; it produced 32 finalized transactions including
+expected fail-closed fake-hash, unauthorized-resolver, and duplicate-settlement
+rejections. The final court source SHA-256 is
+`4793E610064B36E68BFE551D1C06A2E7B26ECBDE174CE94066ABD065E8EF08F8`.

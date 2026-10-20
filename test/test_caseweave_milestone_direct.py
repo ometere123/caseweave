@@ -173,6 +173,12 @@ def _prepare_finalized_case(direct_vm, direct_deploy, owner, respondent, verdict
     court.request_precedent_search(dispute_id)
     direct_vm.mock_llm(r"evaluating a dispute", verdict_json)
     court.request_verdict(dispute_id)
+    frozen_snapshot = json.loads(court.dispute_snapshots_json[dispute_id])
+    frozen_proofs = frozen_snapshot["payload"]["delivery_proofs"]
+    assert len(frozen_proofs) == 1
+    assert frozen_proofs[0]["status"] == "verified"
+    assert frozen_proofs[0]["source_facts"]["commit"]["returned_sha"] == COMMIT
+    assert frozen_proofs[0]["source_facts"]["commit"]["changed_files"] == ["README.md"]
     direct_vm.sender = owner
     case_id = court.finalize_precedent(dispute_id)
     return court, receiver_address, agreement_id, dispute_id, case_id
@@ -515,6 +521,21 @@ def test_partial_release_is_bounded_to_the_consensus_remedy(
     assert court.get_accounting_invariant()["solvent"] is True
     from genlayer.py.types import Address
 
+    # A failed value child restores the committed bucket and permits one
+    # deterministic retry; the failed transfer itself cannot be confirmed.
+    direct_vm.value = int(transfer["amount"])
+    court.__on_errored_message__()
+    direct_vm.value = 0
+    assert court.get_transfer(transfer_id)["status"] == "failed"
+    direct_vm.sender = Address(bytes(direct_owner))
+    court.reconcile_failed_transfer(transfer_id)
+    assert court.get_transfer(transfer_id)["status"] == "reconciled"
+    retry_id = court.settle_judgment(dispute_id)
+    retry = court.get_transfer(retry_id)
+    assert retry["amount"] == 25
+    transfer_id = retry_id
+    transfer = retry
+
     direct_vm.sender = receiver_address
     direct_vm.value = 0
     court.confirm_protocol_receipt(
@@ -748,3 +769,28 @@ def test_receiver_reconciles_eoa_child_locks_without_stranding_other_custody(
     recovered = receiver.get_custody("TR_B")
     assert recovered["status"] == "custodied"
     assert recovered["withdrawal_child_transaction_id"] == ""
+
+
+def test_resolved_agreement_rejects_late_contract_deposits(
+    direct_vm,
+    direct_deploy,
+    direct_owner,
+    direct_alice,
+):
+    court, _, agreement_id, dispute_id, _ = _prepare_finalized_case(
+        direct_vm, direct_deploy, direct_owner, direct_alice, VERDICT
+    )
+    _close_appeal_window(direct_vm, court, dispute_id, direct_owner)
+
+    from genlayer.py.types import Address
+
+    owner = Address(bytes(direct_owner))
+    before_escrow = court.get_escrow(agreement_id)
+    before_accounting = court.get_accounting_invariant()
+    direct_vm.sender = owner
+    direct_vm.value = 1
+    with direct_vm.expect_revert("agreement no longer accepts new funding"):
+        court.fund_agreement(agreement_id, 1)
+    direct_vm.value = 0
+    assert court.get_escrow(agreement_id) == before_escrow
+    assert court.get_accounting_invariant() == before_accounting

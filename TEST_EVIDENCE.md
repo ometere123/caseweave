@@ -1,78 +1,87 @@
-# CaseWeave milestone test evidence
+# CaseWeave security-remediation test evidence
 
-This file records the gates run for the current milestone source. It does not
-convert warnings or expected negative cases into successes.
+This report records the gates for the final adversarial remediation. It does
+not turn expected negative transactions into successes.
 
 ## Pinned toolchain
 
-    repository-local genlayer: 0.39.1
-    genlayer-js: 1.1.8
-    genvm-linter: 0.11.0
-    chain: studionet / 61999
-    GENVM_VERSION: v0.2.16
-    Next.js: 16.2.10
-    Node.js: 22.23.3 local / Vercel Node 24.x
+- repository-local GenLayer CLI: `0.39.1`
+- `genlayer-js`: `1.1.8`
+- `genvm-linter`: `0.11.0`
+- compatible runner: `GENVM_VERSION=v0.2.16`
+- network: `studionet`, chain `61999`
+- Next.js: `16.2.10`
 
 ## Local gates
 
 | Gate | Result |
 | --- | --- |
-| Python unittest discovery | 6 passed, 0 failures |
-| GenVM linter/schema: contracts/caseweave.py | passed; 61 methods, 32 views, 29 writes |
-| GenVM linter/schema: contracts/caseweave_judgment_consumer.py | passed |
-| Direct Mode contract suite | 4 passed, 0 failures |
-| Frontend Vitest suite | 20 passed, 0 failures |
-| TypeScript: app/node_modules/.bin/tsc.cmd --noEmit -p app/tsconfig.json | passed |
-| Local Next.js production build | passed; all 11 routes generated |
-| Playwright local critical workflow | 1 passed |
-| Playwright production critical workflow | 1 passed |
-| Live StudioNet harness | 1 test passed, 24 finalized transactions; one expected unauthorized transaction had GenVM ERROR and unchanged state |
+| Direct Mode contract suites (`test_caseweave_direct.py`, `test_caseweave_milestone_direct.py`, `test_contract_guardrails.py`) | **16 passed, 0 failed** |
+| GenVM lint/schema: `contracts/caseweave.py` | **passed; 0 errors** |
+| GenVM lint/schema: `contracts/caseweave_settlement_receiver.py` | **passed; 0 errors** |
+| GenVM lint/schema: `contracts/caseweave_judgment_consumer.py` | **passed; 0 errors** |
+| Frontend Vitest: `test/frontend/caseweave.test.ts` | **20 passed, 0 failed** |
+| TypeScript: `tsc --noEmit -p app/tsconfig.json` | **passed** |
+| ESLint | **passed** |
+| Next.js production build | **passed; 11 routes** |
+| Playwright local critical workflow | **2 passed** |
+| Playwright production critical workflow | **2 passed** |
+| StudioNet E2E: `test/frontend/studionet_e2e.test.ts` | **1 passed; 32 finalized transactions** |
 
-The Direct Mode tests exercise lifecycle transitions, typed address storage,
-source identity and commit validation, source-fact retrieval, evidence
-challenges, malicious appeal resolution, consensus appellate resolution,
-appeal-bond return, escrow solvency, duplicate review, stale judgment
-rejection, and failed-state preservation. The frontend suite covers runtime
-CalldataAddress bytes and address tagging, malformed/zero/self addresses,
-structured calldata, execution-error handling, authoritative agreement-ID
-resolution, and no-navigation-on-failure.
+The Direct Mode suite covers fake/unrelated child proofs, failed-transfer
+reconciliation, duplicate and replay settlement, current appellate remedy
+selection, bounded partial settlement and remainder refund, late funding
+rejection, frozen evidence, pending challenge gating, malicious evidence and
+appellate leaders, unauthorized appeal mutation, trusted judgment identity,
+and preserved agreement/dispute/proof transitions. The frontend tests cover
+runtime `CalldataAddress` construction and SDK address tagging, malformed
+addresses, execution-error handling, authoritative agreement IDs, and
+success/failure navigation behavior.
 
-The linter emitted only the contract's existing bare-Exception warnings. Lint,
-schema extraction, and semantic validation passed using the compatible cached
-v0.2.16 runner; the contract runner hash was not changed.
+## Live StudioNet evidence
 
-## Live StudioNet result
+Canonical record:
+[`test-evidence/studionet-remediation-final-20261020.json`](test-evidence/studionet-remediation-final-20261020.json).
 
-The canonical record is [test-evidence/studionet-e2e.json](test-evidence/studionet-e2e.json).
-It records the 24 application and consumer transactions, full hashes and
-explorer URLs, FINALIZED consensus status, GenVM execution result, object IDs,
-before/after reads, child transfer hashes, judgment consumption, and final
-accounting. The live sequence is summarized in
-[MILESTONE_REVIEW_EVIDENCE.md](MILESTONE_REVIEW_EVIDENCE.md) and fully linked
-in [DEPLOYMENT.md](DEPLOYMENT.md).
+The run used two party wallets, the deployment owner, and a third unrelated
+wallet. It created `AGR_1`, `PROOF_1`, `DIS_1`, `CASE_1`, `APP_1`, `JDG_2`,
+and custody transfers `TR_1`/`TR_2`. Every successful transaction reached
+`FINALIZED` with GenVM `SUCCESS`.
 
 Expected negative evidence:
 
-- Unrelated-wallet resolve attempt:
-  [0x28bcbea0e38df8b812524a4e70b5d38cfc2a85f9b8965f35af2a089c66d9549d](https://explorer-studio.genlayer.com/tx/0x28bcbea0e38df8b812524a4e70b5d38cfc2a85f9b8965f35af2a089c66d9549d)
-  finalized with GenVM ERROR and rollback payload “only the owner may access
-  the administrative appeal guard”; protected state was unchanged.
-- A prior live consensus disagreement is retained in the harness development
-  history as a fail-closed case; the final clean run used immutable,
-  commit-pinned counter-evidence and completed all required transitions.
+- Unrelated appeal resolver:
+  [resolve_appeal transaction](https://explorer-studio.genlayer.com/tx/0x7d685d0d17d5752639c0065c22717dd002a23993c59cc813d8c42b0b4ac47d1e)
+  finalized with GenVM `ERROR`, rollback `only the owner may access the
+  administrative appeal guard`, and unchanged appeal/dispute/precedent reads.
+- Fabricated appeal-bond confirmation:
+  [confirm_transfer transaction](https://explorer-studio.genlayer.com/tx/0x2f4aa2ced672cbedb82ad5ab94fcd0611b04bc7a543246c5a00e1b5a8f29bf69)
+  finalized with GenVM `ERROR`, rollback `manual child hash confirmations are
+  disabled`, and unchanged transfer state.
+- Fabricated settlement confirmation:
+  [confirm_transfer transaction](https://explorer-studio.genlayer.com/tx/0x8904f983d7fb737d6d8a3bad9e564d77379dcc235a202b4cc0cb4688364b59d8)
+  produced the same fail-closed result and unchanged `TR_2` custody.
+- Duplicate settlement:
+  [settle_judgment transaction](https://explorer-studio.genlayer.com/tx/0x9e62d42115a99b80e6cc0924125287430b5caca61eed09e846d9c3e07de9fb79)
+  finalized with GenVM `ERROR`, rollback `judgment settlement has already
+  been created`.
 
-## Commands
+## Reproduction commands
 
-    python -m unittest discover -v
-    $env:GENVM_VERSION='v0.2.16'; genvm-lint check contracts/caseweave.py --json
-    $env:GENVM_VERSION='v0.2.16'; genvm-lint check contracts/caseweave_judgment_consumer.py --json
-    gltest.exe test/test_caseweave_direct.py test/test_caseweave_milestone_direct.py -v -s
-    npm run test:frontend
-    app/node_modules/.bin/tsc.cmd --noEmit -p app/tsconfig.json
-    npm run build --prefix app
-    npm run test:playwright
+```powershell
+$env:GENVM_VERSION='v0.2.16'
+python -m pytest test/test_caseweave_direct.py test/test_caseweave_milestone_direct.py test/test_contract_guardrails.py -q -s
+genvm-lint contracts/caseweave.py --format json
+genvm-lint contracts/caseweave_settlement_receiver.py --format json
+genvm-lint contracts/caseweave_judgment_consumer.py --format json
+npm run test:frontend
+npm exec --prefix app -- tsc --noEmit -p tsconfig.json
+npm run lint --prefix app
+npm run build --prefix app
+npm run test:playwright
+```
 
-For the live run, provide encrypted local keystores at runtime and set
-CASEWEAVE_E2E_CONTRACT_ADDRESS, CASEWEAVE_E2E_CONSUMER_ADDRESS, and the
-commit-pinned evidence SHA. No key, password, keystore, or environment secret
-is checked in.
+For the live run, supply encrypted disposable keystores at runtime and set
+the three contract addresses and evidence commit. No credential is checked
+in. The complete transaction table and state reads are in
+[DEPLOYMENT.md](DEPLOYMENT.md).
