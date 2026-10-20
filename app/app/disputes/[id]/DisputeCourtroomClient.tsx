@@ -13,6 +13,7 @@ import {
   buildConsumeJudgmentArgs,
 } from "../../../lib/contract";
 import type {
+  Agreement,
   Appeal,
   Dispute,
   DisputeProcedure,
@@ -34,24 +35,27 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
   const [judgment, setJudgment] = useState<Judgment | null>(null);
   const [procedure, setProcedure] = useState<DisputeProcedure | null>(null);
   const [appeals, setAppeals] = useState<Record<string, Appeal>>({});
+  const [agreementCreator, setAgreementCreator] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [lastTransaction, setLastTransaction] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [d, ev, currentJudgment, currentProcedure, allAppeals] = await Promise.all([
-        readContract("get_dispute", [disputeId]),
+      const d = (await readContract("get_dispute", [disputeId])) as Dispute;
+      const [ev, currentJudgment, currentProcedure, allAppeals, agreement] = await Promise.all([
         readContract("list_evidence_for_dispute", [disputeId]),
         readContract("get_current_judgment", [disputeId]),
         readContract("get_dispute_procedure", [disputeId]),
         readContract("list_appeals"),
+        readContract("get_agreement", [d.agreement_id]),
       ]);
-      setDispute(d as Dispute);
+      setDispute(d);
       setEvidence(ev as EvidenceState);
       const parsedJudgment = currentJudgment as Judgment;
       setJudgment(parsedJudgment?.judgment_id ? parsedJudgment : null);
       setProcedure(currentProcedure as DisputeProcedure);
+      setAgreementCreator((agreement as Agreement).creator);
       setAppeals(
         Object.fromEntries(
           Object.entries(allAppeals as Record<string, Appeal>).filter(([, item]) => item.dispute_id === disputeId),
@@ -384,6 +388,16 @@ export function DisputeCourtroomClient({ disputeId }: { disputeId: string }) {
             className="mt-4 border border-gold/70 text-gold font-mono text-xs px-4 py-2 rounded-sm disabled:opacity-50"
           >
             {busy === "refund_partial_settlement_remainder" ? "Preparing remainder refund…" : "Refund partial-settlement remainder"}
+          </button>
+        )}
+
+        {dispute.status === "finalized" && judgment?.status === "finalized" && judgment.appeal_status === "closed" && judgment.remedy.action === "none" && agreementCreator.toLowerCase() === address?.toLowerCase() && (
+          <button
+            onClick={() => runAction("refund_unawarded_commitment", [disputeId])}
+            disabled={busy === "refund_unawarded_commitment"}
+            className="mt-4 border border-gold/70 text-gold font-mono text-xs px-4 py-2 rounded-sm disabled:opacity-50"
+          >
+            {busy === "refund_unawarded_commitment" ? "Preparing no-award refund…" : "Refund unawarded committed balance"}
           </button>
         )}
 

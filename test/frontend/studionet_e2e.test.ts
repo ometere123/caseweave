@@ -23,25 +23,41 @@ import { resolveCreatedAgreementId } from "../../app/lib/create-agreement";
 
 const CONTRACT_ADDRESS =
   process.env.CASEWEAVE_E2E_CONTRACT_ADDRESS ??
-  "0x3BA8098653902c5A5daf08f26A3759fB06C57a2A";
+  "0x2dE423524Cb1f44eD9c62Da0f6917a51D9bb1e4e";
 const RECEIVER_ADDRESS =
   process.env.CASEWEAVE_E2E_RECEIVER_ADDRESS ??
-  "0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f";
+  "0x317FE8eAE21564140787622807A9Cfdc702CDf07";
 const CONSUMER_ADDRESS =
   process.env.CASEWEAVE_E2E_CONSUMER_ADDRESS ??
-  "0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211";
+  "0x0bABB4777B485f66Aefd1D1FdC021AF0De248EaD";
 const EVIDENCE_COMMIT =
   process.env.CASEWEAVE_E2E_COMMIT_SHA ??
-  "abd9e03ab772e9ffddc35c1542c6e013470a93d5";
+  "8b2c81d3a085816315a4275b20992a19fda83648";
 const EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_EVIDENCE_URL ??
-  `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-counter-facts.txt`;
+  `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-delivery.md`;
 const COUNTER_EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_COUNTER_EVIDENCE_URL ??
   `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-counter-facts.txt`;
+const CHALLENGE_EVIDENCE_URL =
+  process.env.CASEWEAVE_E2E_CHALLENGE_EVIDENCE_URL ??
+  `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-delivery.md`;
 const APP_EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_APP_EVIDENCE_URL ??
-  "https://caseweave.vercel.app/evidence/caseweave-remediation.txt";
+  "https://caseweave.vercel.app";
+
+const EVIDENCE_CHANGED_FILES = [
+  "app/app/agreements/[id]/AgreementChamberClient.tsx",
+  "app/app/disputes/[id]/DisputeCourtroomClient.tsx",
+  "app/lib/contract.ts",
+  "app/lib/genlayer.ts",
+  "contracts/caseweave.py",
+  "contracts/caseweave_settlement_receiver.py",
+  "test/frontend/caseweave.test.ts",
+  "test/frontend/studionet_e2e.test.ts",
+  "test/test_caseweave_direct.py",
+  "test/test_caseweave_milestone_direct.py",
+];
 
 type AccountName = "owner" | "party_a" | "party_b" | "third";
 
@@ -455,14 +471,15 @@ it(
         repositoryUrl,
         repositoryIdentity: "ometere123/caseweave",
         commitSha,
-        pullRequest: { number: 1, head_sha: commitSha, merged: true },
-        changedFiles: ["docs/evidence/caseweave-counter-facts.txt"],
+        pullRequest: { status: "not_submitted" },
+        changedFiles: EVIDENCE_CHANGED_FILES,
         ciResults: {
           commit_sha: commitSha,
           conclusion: "success",
           workflow: "caseweave-ci",
+          url: `https://api.github.com/repos/ometere123/caseweave/commits/${commitSha}/check-runs`,
         },
-        deploymentArtifacts: ["https://caseweave.vercel.app", APP_EVIDENCE_URL],
+        deploymentArtifacts: [APP_EVIDENCE_URL],
         evidenceUrl: EVIDENCE_URL,
       });
       const registered = await send(
@@ -481,15 +498,25 @@ it(
           "list_delivery_proofs",
         );
       const proofBeforeVerification = await readCase(partyAClient, "get_delivery_proof", [proofId]);
-      const verifiedProof = await send(
-        "verify delivery proof with independent validator web retrieval",
-        partyAClient,
-        partyA,
-        CONTRACT_ADDRESS,
-        "verify_delivery_proof",
-        [proofId],
-        evidence,
-      );
+      let verifiedProof: Awaited<ReturnType<typeof send>> | null = null;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          verifiedProof = await send(
+            `verify delivery proof with independent validator web retrieval (attempt ${attempt})`,
+            partyAClient,
+            partyA,
+            CONTRACT_ADDRESS,
+            "verify_delivery_proof",
+            [proofId],
+            evidence,
+          );
+          break;
+        } catch (error) {
+          if (!String(error).includes("MAJORITY_DISAGREE") || attempt === 3) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+        }
+      }
+      if (!verifiedProof) throw new Error("delivery proof verification did not produce a finalized result");
       const proofAfterVerification = await readCase(partyAClient, "get_delivery_proof", [proofId]);
       expect(proofAfterVerification.status).toBe("verified");
       expect(proofAfterVerification.content_hash).toMatch(/^[0-9a-f]{64}$/);
@@ -628,7 +655,7 @@ it(
           0,
           "authenticity",
           "The respondent's delivery record must be independently re-fetched before this assertion is admitted.",
-          EVIDENCE_URL,
+          CHALLENGE_EVIDENCE_URL,
         ],
         evidence,
       );
@@ -638,15 +665,32 @@ it(
           await readCase(partyAClient, "list_evidence_challenges", [disputeId]),
           "list_evidence_challenges",
         );
-      await send(
-        "verify immutable counter-evidence for the challenge",
-        partyBClient,
-        partyB,
-        CONTRACT_ADDRESS,
-        "verify_evidence_url",
-        [disputeId, "claimant", 2],
-        evidence,
-      );
+      let counterEvidenceVerification;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          counterEvidenceVerification = await send(
+            `verify immutable counter-evidence for the challenge (attempt ${attempt})`,
+            partyBClient,
+            partyB,
+            CONTRACT_ADDRESS,
+            "verify_evidence_url",
+            [disputeId, "claimant", 2],
+            evidence,
+          );
+          break;
+        } catch (error) {
+          if (
+            attempt === 3 ||
+            !(error instanceof Error) ||
+            !error.message.includes("MAJORITY_DISAGREE")
+          ) {
+            throw error;
+          }
+        }
+      }
+      if (!counterEvidenceVerification) {
+        throw new Error("counter-evidence verification did not produce a finalized result");
+      }
       await send(
         "resolve challenged evidence by independent evidence-court consensus",
         partyAClient,

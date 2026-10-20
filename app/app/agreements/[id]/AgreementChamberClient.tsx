@@ -32,6 +32,8 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
   const [disputes, setDisputes] = useState<Record<string, Dispute>>({});
   const [transfers, setTransfers] = useState<Record<string, TransferRecord>>({});
   const [custody, setCustody] = useState<Record<string, CustodyRecord>>({});
+  const [receiverOwner, setReceiverOwner] = useState("");
+  const [withdrawalChildHash, setWithdrawalChildHash] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
@@ -42,12 +44,13 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
 
   const load = useCallback(async () => {
     try {
-      const [ag, commitment, milestoneRows, disp, transferRows] = await Promise.all([
+      const [ag, commitment, milestoneRows, disp, transferRows, configuredReceiverOwner] = await Promise.all([
         readContract("get_agreement", [agreementId]),
         readContract("get_agreement_spec", [agreementId]),
         readContract("list_milestones", [agreementId]),
         readContract("list_disputes_by_agreement", [agreementId]),
         readContract("list_transfers", [agreementId]),
+        readReceiverContract("get_owner", []),
       ]);
       const parsedTransfers = transferRows as Record<string, TransferRecord>;
       const custodyEntries = await Promise.all(
@@ -65,6 +68,7 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
       setMilestones(milestoneRows as Record<string, Milestone>);
       setDisputes(disp as Record<string, Dispute>);
       setTransfers(parsedTransfers);
+      setReceiverOwner(String(configuredReceiverOwner));
       setCustody(Object.fromEntries(custodyEntries.filter((entry): entry is readonly [string, CustodyRecord] => entry !== null)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load agreement");
@@ -179,6 +183,29 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit custody withdrawal");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleWithdrawalReconciliation(
+    transferId: string,
+    method: "release_withdrawal_lock" | "reconcile_failed_withdrawal",
+  ) {
+    if (!address) return connect();
+    if (!/^0x[0-9a-fA-F]{64}$/.test(withdrawalChildHash.trim())) {
+      setError("Enter the externally inspected 32-byte child transaction hash.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await writeReceiverContract(address, method, [transferId, withdrawalChildHash.trim()]);
+      setLastTransaction(result.hash);
+      setWithdrawalChildHash("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${method}`);
     } finally {
       setBusy(false);
     }
@@ -408,6 +435,19 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
                       )}
                       {record.withdrawal_child_transaction_id && (
                         <a className="text-[10px] text-citation underline break-all block mt-1" href={getExplorerTxUrl(record.withdrawal_child_transaction_id)} target="_blank" rel="noreferrer">inspect recorded child hash</a>
+                      )}
+                      {record.withdrawal_failure_child_transaction_id && (
+                        <p className="text-[10px] text-dispute mt-1 break-all">Last inspected failed child: {record.withdrawal_failure_child_transaction_id}</p>
+                      )}
+                      {record.status === "withdrawal_submitted" && receiverOwner && address?.toLowerCase() === receiverOwner.toLowerCase() && (
+                        <div className="mt-3 border-t border-line/30 pt-2 space-y-2">
+                          <p className="text-[10px] text-muted">Receiver-owner reconciliation only. This operator reference is not cryptographic EOA delivery proof.</p>
+                          <input aria-label={`External withdrawal child hash for ${record.transfer_id}`} value={withdrawalChildHash} onChange={(event) => setWithdrawalChildHash(event.target.value)} className="w-full input font-mono text-[10px]" placeholder="0x + 64 hex characters" />
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={() => handleWithdrawalReconciliation(record.transfer_id, "release_withdrawal_lock")} disabled={busy} className="border border-citation/60 text-citation font-mono text-[10px] px-2 py-1 rounded-sm disabled:opacity-50">Record inspected success</button>
+                            <button onClick={() => handleWithdrawalReconciliation(record.transfer_id, "reconcile_failed_withdrawal")} disabled={busy} className="border border-dispute/60 text-dispute font-mono text-[10px] px-2 py-1 rounded-sm disabled:opacity-50">Reopen inspected failure</button>
+                          </div>
+                        </div>
                       )}
                     </div>
                   );

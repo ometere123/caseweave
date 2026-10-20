@@ -29,6 +29,7 @@ class CustodyRecord:
     received_at: str
     withdrawal_submitted_at: str
     withdrawal_child_transaction_id: str
+    withdrawal_failure_child_transaction_id: str
 
 
 class CaseWeaveSettlementReceiver(gl.Contract):
@@ -92,6 +93,7 @@ class CaseWeaveSettlementReceiver(gl.Contract):
             received_at=gl.message_raw["datetime"],
             withdrawal_submitted_at="",
             withdrawal_child_transaction_id="",
+            withdrawal_failure_child_transaction_id="",
         )
 
         # This is the only court accounting callback.  The court accepts it
@@ -129,6 +131,8 @@ class CaseWeaveSettlementReceiver(gl.Contract):
         if transfer_id not in self.records:
             raise gl.vm.UserError("custody record not found")
         record = self.records[transfer_id]
+        if record.withdrawal_child_transaction_id:
+            raise gl.vm.UserError("custody withdrawal already has an externally recorded child")
         if record.status != "custodied":
             raise gl.vm.UserError("custody record is not withdrawable")
         if gl.message.sender_address != record.beneficiary:
@@ -184,6 +188,35 @@ class CaseWeaveSettlementReceiver(gl.Contract):
         )
         self.active_withdrawal_id = ""
 
+    @gl.public.write
+    def reconcile_failed_withdrawal(
+        self, transfer_id: str, child_transaction_id: str
+    ) -> None:
+        """Reopen custody only after the receiver owner inspected a failed child.
+
+        GenVM error callbacks do not identify the originating EOA child.  The
+        callback below is therefore deliberately non-mutating.  This narrow
+        owner operation is the explicit recovery hook after an external
+        operator has verified that the named child failed.  It never marks a
+        payment delivered and it is valid only for the currently serialized
+        withdrawal lock, so a stale callback cannot alter another beneficiary's
+        record.
+        """
+        if gl.message.sender_address != self.owner:
+            raise gl.vm.UserError("only the receiver owner may reconcile a failed withdrawal")
+        if transfer_id not in self.records:
+            raise gl.vm.UserError("custody record not found")
+        record = self.records[transfer_id]
+        if record.status != "withdrawal_submitted" or self.active_withdrawal_id != transfer_id:
+            raise gl.vm.UserError("withdrawal failure is not the active record")
+        record.withdrawal_failure_child_transaction_id = self._valid_child_transaction_id(
+            child_transaction_id
+        )
+        record.withdrawal_submitted_at = ""
+        record.withdrawal_child_transaction_id = ""
+        record.status = "custodied"
+        self.active_withdrawal_id = ""
+
     @gl.public.view
     def get_owner(self) -> str:
         return self.owner.as_hex
@@ -209,15 +242,14 @@ class CaseWeaveSettlementReceiver(gl.Contract):
             "received_at": record.received_at,
             "withdrawal_submitted_at": record.withdrawal_submitted_at,
             "withdrawal_child_transaction_id": record.withdrawal_child_transaction_id,
+            "withdrawal_failure_child_transaction_id": record.withdrawal_failure_child_transaction_id,
         }
 
     @gl.public.write.payable
     def __on_errored_message__(self) -> None:
-        if not self.active_withdrawal_id or self.active_withdrawal_id not in self.records:
-            return
-        record = self.records[self.active_withdrawal_id]
-        if record.status == "withdrawal_submitted":
-            record.status = "custodied"
-            record.withdrawal_submitted_at = ""
-            record.withdrawal_child_transaction_id = ""
-        self.active_withdrawal_id = ""
+        # This callback has no originating child-transfer identifier.  It must
+        # not mutate active custody: a late callback from a previous child
+        # could otherwise reopen a different beneficiary's withdrawal.  The
+        # receiver owner uses reconcile_failed_withdrawal after independently
+        # inspecting the failed child.
+        return

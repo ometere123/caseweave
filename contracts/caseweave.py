@@ -392,6 +392,7 @@ class CaseWeaveCourt(gl.Contract):
     transfers: TreeMap[str, TransferRecord]
     judgment_settlement_transfers: TreeMap[str, str]
     judgment_refund_transfers: TreeMap[str, str]
+    judgment_unawarded_refund_transfers: TreeMap[str, str]
     policy_amendments: TreeMap[str, PolicyAmendment]
     dispute_proofs_json: TreeMap[str, str]
     dispute_procedure_json: TreeMap[str, str]
@@ -3049,9 +3050,39 @@ pretend that a final remedy was reached.
                 independent = json.loads(appellate_assessment())
                 if self._remedy_signature(independent.get("remedy")) != self._remedy_signature(candidate.get("remedy")):
                     return False
+                candidate_outcome = str(
+                    candidate.get("remedy_outcome", "") or original_judgment.outcome
+                )
+                independent_outcome = str(
+                    independent.get("remedy_outcome", "") or original_judgment.outcome
+                )
+                if candidate_outcome != independent_outcome:
+                    return False
+                def finding_signature(value):
+                    findings = value.get("findings")
+                    if not isinstance(findings, list) or len(findings) > MAX_OBLIGATIONS:
+                        return None
+                    signature = {}
+                    for item in findings:
+                        if not isinstance(item, dict):
+                            return None
+                        obligation = str(item.get("obligation", ""))
+                        finding = str(item.get("finding", ""))
+                        source = item.get("source", "")
+                        if not obligation or finding not in ALLOWED_FINDINGS or not isinstance(source, str):
+                            return None
+                        if obligation in signature:
+                            return None
+                        signature[obligation] = finding
+                    return signature
+                candidate_findings = finding_signature(candidate)
+                independent_findings = finding_signature(independent)
+                if candidate_findings is None or independent_findings is None:
+                    return False
                 return (
                     independent.get("result") == candidate.get("result")
                     and independent.get("affected_case_id", "") == candidate.get("affected_case_id", "")
+                    and candidate_findings == independent_findings
                 )
             except Exception:
                 return False
@@ -3314,6 +3345,60 @@ pretend that a final remedy was reached.
             "committed",
         )
         self.judgment_refund_transfers[judgment_id] = refund_id
+        return refund_id
+
+    @gl.public.write
+    def refund_unawarded_commitment(self, dispute_id: str) -> str:
+        """Return committed funds when the final judgment authorizes no award.
+
+        A verdict such as revision_required, insufficient_evidence, or
+        escalate_to_human has a canonical ``none`` remedy.  Those verdicts
+        must not create a payout, but they also must not trap the committed
+        milestone forever.  The creator may refund only the remaining
+        committed bucket, after the current judgment is final and its appeal
+        window is closed.  The transfer is still routed through the trusted
+        custody receiver and inherits the normal idempotency/accounting
+        protections.
+        """
+        dispute = self.disputes[dispute_id]
+        agreement = self.agreements[dispute.agreement_id]
+        if gl.message.sender_address != agreement.creator:
+            raise gl.vm.UserError("only the agreement creator may refund an unawarded commitment")
+        if dispute.status != "finalized":
+            raise gl.vm.UserError("unawarded commitment requires a finalized dispute")
+        judgment_id = self._latest_judgment_id(dispute_id)
+        if not judgment_id or judgment_id not in self.judgments:
+            raise gl.vm.UserError("no current judgment exists")
+        judgment = self.judgments[judgment_id]
+        if judgment.status != "finalized" or judgment.appeal_status != "closed":
+            raise gl.vm.UserError("unawarded commitment requires a final judgment after the appeal window")
+        remedy = self._canonical_remedy(
+            json.loads(judgment.remedy_json or "{}"), judgment.outcome
+        )
+        if remedy["action"] != "none":
+            raise gl.vm.UserError("the current judgment authorizes a different remedy")
+        existing_refund_id = self.judgment_unawarded_refund_transfers.get(judgment_id, "")
+        if existing_refund_id:
+            existing_refund = self.transfers[existing_refund_id]
+            if existing_refund.status in ("pending", "custodied"):
+                raise gl.vm.UserError("unawarded commitment refund has already been created")
+            if existing_refund.status not in ("failed", "reconciled"):
+                raise gl.vm.UserError("unawarded commitment refund has an invalid transfer state")
+        escrow = self._ensure_escrow(dispute.agreement_id)
+        amount = int(escrow.committed)
+        if amount <= 0:
+            raise gl.vm.UserError("there is no committed unawarded balance to refund")
+        refund_id = self._create_protocol_transfer(
+            dispute.agreement_id,
+            dispute_id,
+            judgment_id,
+            "",
+            agreement.creator,
+            amount,
+            "unawarded_commitment_refund",
+            "committed",
+        )
+        self.judgment_unawarded_refund_transfers[judgment_id] = refund_id
         return refund_id
 
     @gl.public.write

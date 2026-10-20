@@ -3,15 +3,15 @@ import { assertDistinctCounterparty, toCalldataAddress } from "./address";
 
 export const CASEWEAVE_CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS ??
-    "0x3BA8098653902c5A5daf08f26A3759fB06C57a2A") as `0x${string}`;
+    "0x2dE423524Cb1f44eD9c62Da0f6917a51D9bb1e4e") as `0x${string}`;
 
 export const CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS ??
-    "0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211") as `0x${string}` | "";
+    "0x0bABB4777B485f66Aefd1D1FdC021AF0De248EaD") as `0x${string}` | "";
 
 export const CASEWEAVE_SETTLEMENT_RECEIVER_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_SETTLEMENT_RECEIVER_ADDRESS ??
-    "0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f") as `0x${string}` | "";
+    "0x317FE8eAE21564140787622807A9Cfdc702CDf07") as `0x${string}` | "";
 
 export const EVIDENCE_STATUSES = [
   "unverified",
@@ -160,6 +160,12 @@ export function buildSetAppealWindowArgs(
   appealDeadline: string,
 ): CalldataEncodable[] {
   return [disputeId, appealDeadline];
+}
+
+export function buildUnawardedCommitmentRefundArgs(
+  disputeId: string,
+): CalldataEncodable[] {
+  return [disputeId];
 }
 
 export function buildConsumeJudgmentArgs(input: {
@@ -474,4 +480,5 @@ export type CustodyRecord = {
   received_at: string;
   withdrawal_submitted_at: string;
   withdrawal_child_transaction_id: string;
+  withdrawal_failure_child_transaction_id: string;
 };

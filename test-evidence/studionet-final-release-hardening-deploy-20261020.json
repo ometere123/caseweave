@@ -1,0 +1,96 @@
+{
+  "network": "studionet",
+  "chainId": 61999,
+  "rpc": "https://studio.genlayer.com/api",
+  "explorer": "https://explorer-studio.genlayer.com",
+  "cli": "genlayer@0.39.1",
+  "sdk": "genlayer-js@1.1.8",
+  "genvmVersion": "v0.2.16",
+  "deployer": "0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7",
+  "sourceSha256": {
+    "court": "FD090026FDEE9F73D12EA42E7402E2767A5686EC49B4C7189A83C9F9D717D0D8",
+    "receiver": "8FBF75D9D66262281C262A4868E4E6807DE1E33F9AC7E9D1A43CDDB3BA9F5B61",
+    "consumer": "402BE27C006D12CF61C3F452EBF41887568EDFF8021E7596D76FF295BACB68C8"
+  },
+  "contracts": {
+    "receiver": {
+      "address": "0x317FE8eAE21564140787622807A9Cfdc702CDf07",
+      "deployment": {
+        "label": "deploy CaseWeaveSettlementReceiver",
+        "contract": "0x317FE8eAE21564140787622807A9Cfdc702CDf07",
+        "method": "deploy",
+        "hash": "0x01b325747a3b8b9a643e7837d3bdfd580807780d416f93580c8a2da09af15b90",
+        "explorer": "https://explorer-studio.genlayer.com/tx/0x01b325747a3b8b9a643e7837d3bdfd580807780d416f93580c8a2da09af15b90",
+        "finality": "FINALIZED",
+        "consensusResult": 6,
+        "executionResult": "SUCCESS",
+        "executionResultName": null,
+        "consensusFinal": null
+      }
+    },
+    "court": {
+      "address": "0x2dE423524Cb1f44eD9c62Da0f6917a51D9bb1e4e",
+      "deployment": {
+        "label": "deploy corrected CaseWeaveCourt",
+        "contract": "0x2dE423524Cb1f44eD9c62Da0f6917a51D9bb1e4e",
+        "method": "deploy",
+        "hash": "0xff8bda956aed523a4cd3c1f9719585ab07265aa7c75690ab19895dbf66d42b0c",
+        "explorer": "https://explorer-studio.genlayer.com/tx/0xff8bda956aed523a4cd3c1f9719585ab07265aa7c75690ab19895dbf66d42b0c",
+        "finality": "FINALIZED",
+        "consensusResult": 6,
+        "executionResult": "SUCCESS",
+        "executionResultName": null,
+        "consensusFinal": null
+      }
+    },
+    "consumer": {
+      "address": "0x0bABB4777B485f66Aefd1D1FdC021AF0De248EaD",
+      "deployment": {
+        "label": "deploy trusted CaseWeaveJudgmentConsumer",
+        "contract": "0x0bABB4777B485f66Aefd1D1FdC021AF0De248EaD",
+        "method": "deploy",
+        "hash": "0x1798988d023e26089e39146d85c20ceda257fdc739b5caab81746057085edafa",
+        "explorer": "https://explorer-studio.genlayer.com/tx/0x1798988d023e26089e39146d85c20ceda257fdc739b5caab81746057085edafa",
+        "finality": "FINALIZED",
+        "consensusResult": 6,
+        "executionResult": "SUCCESS",
+        "executionResultName": null,
+        "consensusFinal": null
+      }
+    }
+  },
+  "configuration": {
+    "court": {
+      "label": "configure_settlement_receiver",
+      "contract": "0x2dE423524Cb1f44eD9c62Da0f6917a51D9bb1e4e",
+      "method": "configure_settlement_receiver",
+      "hash": "0x585bce38a182ccf4479c0dbceed544804ccd818e76b770931f3b36d9b6296b70",
+      "explorer": "https://explorer-studio.genlayer.com/tx/0x585bce38a182ccf4479c0dbceed544804ccd818e76b770931f3b36d9b6296b70",
+      "finality": "FINALIZED",
+      "consensusResult": 6,
+      "executionResult": "SUCCESS",
+      "executionResultName": null,
+      "consensusFinal": null
+    },
+    "receiver": {
+      "label": "configure_court",
+      "contract": "0x317FE8eAE21564140787622807A9Cfdc702CDf07",
+      "method": "configure_court",
+      "hash": "0x33bc5d8657a0f53cf109998d60958bf0b2091dc64815d14f27706f7c271542d0",
+      "explorer": "https://explorer-studio.genlayer.com/tx/0x33bc5d8657a0f53cf109998d60958bf0b2091dc64815d14f27706f7c271542d0",
+      "finality": "FINALIZED",
+      "consensusResult": 6,
+      "executionResult": "SUCCESS",
+      "executionResultName": null,
+      "consensusFinal": null
+    }
+  },
+  "verification": {
+    "owner": "0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7",
+    "courtOwner": "0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7",
+    "courtReceiver": "0x317FE8eAE21564140787622807A9Cfdc702CDf07",
+    "receiverOwner": "0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7",
+    "receiverCourt": "0x2dE423524Cb1f44eD9c62Da0f6917a51D9bb1e4e",
+    "consumerCourt": "0x2dE423524Cb1f44eD9c62Da0f6917a51D9bb1e4e"
+  }
+}

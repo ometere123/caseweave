@@ -717,15 +717,39 @@ def test_revision_required_cannot_create_a_full_settlement(
             "tags": ["revision"],
         }
     ) + "\n```"
-    court, _, agreement_id, dispute_id, _ = _prepare_finalized_case(
+    court, receiver_address, agreement_id, dispute_id, _ = _prepare_finalized_case(
         direct_vm, direct_deploy, direct_owner, direct_alice, revision_verdict
     )
     _close_appeal_window(direct_vm, court, dispute_id, direct_owner)
     before = court.get_escrow(agreement_id)
+    from genlayer.py.types import Address
+
     with direct_vm.expect_revert("judgment does not authorize a funded payout"):
         court.settle_judgment(dispute_id)
     assert court.get_escrow(agreement_id) == before
     assert court.get_accounting_invariant()["solvent"] is True
+
+    # A final no-award judgment cannot pay a beneficiary, but its remaining
+    # committed funds are still legitimately refundable to the creator through
+    # the same custody/accounting path.
+    direct_vm.sender = direct_owner
+    refund_id = court.refund_unawarded_commitment(dispute_id)
+    refund = court.get_transfer(refund_id)
+    assert refund["purpose"] == "unawarded_commitment_refund"
+    assert refund["amount"] == before["committed"]
+    assert refund["recipient"] == court.get_agreement(agreement_id)["creator"]
+    assert court.get_escrow(agreement_id)["committed"] == 0
+    direct_vm.sender = receiver_address
+    court.confirm_protocol_receipt(
+        refund_id,
+        receiver_address,
+        Address(bytes(direct_owner)),
+        int(refund["amount"]),
+        refund["proof_commitment"],
+    )
+    direct_vm.sender = direct_owner
+    with direct_vm.expect_revert("unawarded commitment refund has already been created"):
+        court.refund_unawarded_commitment(dispute_id)
 
 
 def test_appellate_replacement_judgment_controls_recipient_and_amount(
@@ -886,29 +910,46 @@ def test_receiver_reconciles_eoa_child_locks_without_stranding_other_custody(
     assert receiver.get_custody("TR_B")["status"] == "withdrawal_submitted"
     assert receiver.get_active_withdrawal_id() == "TR_B"
 
-    # The runtime error callback restores custody for a failed value child.
+    # The generic runtime error callback has no child id and must not mutate
+    # whichever record happens to be active. A late callback from TR_A cannot
+    # reopen or clear TR_B.
     direct_vm.value = 9
     receiver.__on_errored_message__()
     direct_vm.value = 0
     failed = receiver.get_custody("TR_B")
-    assert failed["status"] == "custodied"
+    assert failed["status"] == "withdrawal_submitted"
     assert failed["withdrawal_child_transaction_id"] == ""
     assert receiver.get_custody("TR_A")["withdrawal_child_transaction_id"] == "0x" + "1" * 64
+    assert receiver.get_active_withdrawal_id() == "TR_B"
+
+    # Only the receiver owner can reopen custody after independently checking
+    # the failed child. The hash is retained as an operational audit reference
+    # and is never treated as proof of delivery.
+    with direct_vm.expect_revert("only the receiver owner"):
+        receiver.reconcile_failed_withdrawal("TR_B", "0x" + "2" * 64)
+    direct_vm.sender = owner
+    receiver.reconcile_failed_withdrawal("TR_B", "0x" + "2" * 64)
+    recovered = receiver.get_custody("TR_B")
+    assert recovered["status"] == "custodied"
+    assert recovered["withdrawal_failure_child_transaction_id"] == "0x" + "2" * 64
     assert receiver.get_active_withdrawal_id() == ""
 
-    # A failed child is restored only by the runtime error callback. There is
-    # no owner method that can reopen a withdrawal from an asserted hash.
+    # A recovered failed child may be retried. A stale callback still cannot
+    # mutate the new attempt, and an observed success permanently prevents a
+    # second withdrawal for that custody record.
     direct_vm.sender = bob
     receiver.withdraw("TR_B")
     direct_vm.value = 9
     receiver.__on_errored_message__()
     direct_vm.value = 0
-    recovered = receiver.get_custody("TR_B")
-    assert recovered["status"] == "custodied"
-    assert recovered["withdrawal_child_transaction_id"] == ""
+    assert receiver.get_custody("TR_B")["status"] == "withdrawal_submitted"
+    assert receiver.get_active_withdrawal_id() == "TR_B"
     direct_vm.sender = owner
-    with direct_vm.expect_revert("withdrawal lock is not active"):
-        receiver.release_withdrawal_lock("TR_B", "0x" + "2" * 64)
+    receiver.release_withdrawal_lock("TR_B", "0x" + "3" * 64)
+    assert receiver.get_custody("TR_B")["withdrawal_child_transaction_id"] == "0x" + "3" * 64
+    with direct_vm.expect_revert("already has an externally recorded child"):
+        direct_vm.sender = bob
+        receiver.withdraw("TR_B")
 
 
 def test_resolved_agreement_rejects_late_contract_deposits(
