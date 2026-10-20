@@ -217,15 +217,17 @@ inside the contract before being written to state.
 | Chain ID   | 61999                                                               |
 | RPC        | https://studio.genlayer.com/api                                    |
 | Explorer   | https://explorer-studio.genlayer.com                            |
-| Contract   | `0x2dE423524Cb1f44eD9c62Da0f6917a51D9bb1e4e`                    |
-| Settlement receiver | `0x317FE8eAE21564140787622807A9Cfdc702CDf07`              |
-| Judgment consumer | `0x0bABB4777B485f66Aefd1D1FdC021AF0De248EaD`              |
+| Contract   | `0x357688E5fc8D433eb2De071fE9ceeDf93eBB024f`                    |
+| Settlement receiver | `0xeF7c04C58716e00F090b2C9ec305BDae86E0D4F7`              |
+| Judgment consumer | `0x9E4Ecf45C0B356bDc46731A4B862ab3E7Ffa2488`              |
 | Source     | [contracts/caseweave.py](contracts/caseweave.py)                    |
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the verified deployment, owner role,
-transaction evidence, escrow reconciliation, redeploy instructions, and the
-full StudioNet agreement-to-judgment-to-settlement run. The production
-frontend is [caseweave.vercel.app](https://caseweave.vercel.app).
+transaction evidence, escrow design, redeploy instructions, and the latest
+StudioNet first-instance/appellate-consensus record. The production frontend
+is [caseweave.vercel.app](https://caseweave.vercel.app). Live settlement and
+consumer evidence is only claimed when appellate consensus reaches a successful
+GenVM result.
 
 For the iteration record, see [PROJECT_HISTORY.md](PROJECT_HISTORY.md).
 

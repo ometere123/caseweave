@@ -91,6 +91,14 @@ def _future_deadline(direct_vm, seconds: int) -> str:
     )
 
 
+def _warp(direct_vm, timestamp: str) -> None:
+    """Advance Direct Mode and keep the contract message clock in sync."""
+    direct_vm.warp(timestamp)
+    from genlayer import gl
+
+    gl.message_raw["datetime"] = timestamp
+
+
 def _accept_procedure(direct_vm, court, dispute_id, claimant, respondent):
     response_deadline = _future_deadline(direct_vm, 3600)
     challenge_deadline = _future_deadline(direct_vm, 7200)
@@ -524,6 +532,91 @@ def test_procedure_deadlines_require_canonical_bilateral_acceptance(
     assert len(final_procedure["appeal_deadline_accepted_by"]) == 2
 
 
+def test_uncooperative_party_cannot_hold_procedure_open_forever(
+    direct_vm,
+    direct_deploy,
+    direct_owner,
+    direct_alice,
+):
+    """A stored proposal has a deterministic, bounded liveness fallback."""
+    direct_vm.sender = direct_owner
+    court = direct_deploy("contracts/caseweave.py", sdk_version="v0.2.16")
+    from genlayer.py.types import Address
+
+    owner = Address(bytes(direct_owner))
+    alice = Address(bytes(direct_alice))
+    direct_vm.sender = owner
+    agreement_id = court.create_agreement(
+        "Bounded procedure agreement",
+        "The parties must follow a bounded dispute procedure.",
+        alice,
+        "custom",
+        ["deadlines"],
+        0,
+        "public_precedent",
+    )
+    direct_vm.sender = alice
+    court.accept_agreement(agreement_id)
+    direct_vm.sender = owner
+    dispute_id = court.file_dispute(
+        agreement_id,
+        "The respondent did not complete the committed work.",
+        "require_revision",
+        [],
+    )
+
+    response_deadline = _future_deadline(direct_vm, 3600)
+    challenge_deadline = _future_deadline(direct_vm, 7200)
+    court.set_dispute_deadlines(dispute_id, response_deadline, challenge_deadline)
+    with direct_vm.expect_revert("not yet available"):
+        court.activate_proposed_deadlines(dispute_id)
+
+    challenge_time = datetime.fromisoformat(challenge_deadline.replace("Z", "+00:00"))
+    _warp(
+        direct_vm,
+        (challenge_time + timedelta(seconds=1))
+        .astimezone(timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+    direct_vm.sender = owner
+    court.activate_proposed_deadlines(dispute_id)
+    committed = court.get_dispute_procedure(dispute_id)
+    assert committed["deadlines_status"] == "fallback_accepted"
+    assert committed["response_deadline"] == response_deadline
+    assert committed["challenge_deadline"] == challenge_deadline
+    assert committed["deadlines_accepted_by"][-1] == "bounded-fallback"
+
+    response_time = datetime.fromisoformat(response_deadline.replace("Z", "+00:00"))
+    _warp(
+        direct_vm,
+        (response_time + timedelta(seconds=1))
+        .astimezone(timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+    court.advance_after_response_deadline(dispute_id)
+    assert court.get_dispute(dispute_id)["status"] == "awaiting_precedent_search"
+
+    appeal_deadline = _future_deadline(direct_vm, 3600)
+    court.set_appeal_window(dispute_id, appeal_deadline)
+    with direct_vm.expect_revert("not yet available"):
+        court.activate_proposed_appeal_window(dispute_id)
+    appeal_time = datetime.fromisoformat(appeal_deadline.replace("Z", "+00:00"))
+    _warp(
+        direct_vm,
+        (appeal_time + timedelta(seconds=1))
+        .astimezone(timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+    court.activate_proposed_appeal_window(dispute_id)
+    fallback_appeal = court.get_dispute_procedure(dispute_id)
+    assert fallback_appeal["appeal_deadline_status"] == "fallback_accepted"
+    assert fallback_appeal["appeal_deadline"] == appeal_deadline
+    assert fallback_appeal["appeal_deadline_accepted_by"][-1] == "bounded-fallback"
+
+
 def test_delivery_source_commitment_and_validator_identity_fail_closed(
     direct_vm,
     direct_deploy,
@@ -872,6 +965,10 @@ def test_receiver_reconciles_eoa_child_locks_without_stranding_other_custody(
     court = Address(bytes([0x71]) * 20)
     direct_vm.sender = owner
     receiver.configure_court(court)
+    # Direct Mode does not credit payable message values to contract balances;
+    # seed the receiver so the withdrawal checkpoint/recovery invariant is
+    # exercised against a non-zero balance.
+    direct_vm.deal(receiver.address, 16)
 
     direct_vm.sender = court
     direct_vm.value = 7
@@ -944,6 +1041,19 @@ def test_receiver_reconciles_eoa_child_locks_without_stranding_other_custody(
     direct_vm.value = 0
     assert receiver.get_custody("TR_B")["status"] == "withdrawal_submitted"
     assert receiver.get_active_withdrawal_id() == "TR_B"
+    # Simulate a child that actually debited the receiver. An owner-supplied
+    # failure hash cannot reopen the same custody record after that checkpoint
+    # moved, so it cannot create a duplicate beneficiary claim.
+    submitted = receiver.get_custody("TR_B")
+    direct_vm.deal(
+        receiver.address,
+        int(submitted["withdrawal_balance_before"]) - int(submitted["amount"]),
+    )
+    direct_vm.sender = owner
+    with direct_vm.expect_revert("balance changed"):
+        receiver.reconcile_failed_withdrawal("TR_B", "0x" + "4" * 64)
+    assert receiver.get_custody("TR_B")["status"] == "withdrawal_submitted"
+    direct_vm.deal(receiver.address, int(submitted["withdrawal_balance_before"]))
     direct_vm.sender = owner
     receiver.release_withdrawal_lock("TR_B", "0x" + "3" * 64)
     assert receiver.get_custody("TR_B")["withdrawal_child_transaction_id"] == "0x" + "3" * 64

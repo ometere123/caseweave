@@ -1,31 +1,34 @@
-# Milestone Diff
+# Final release diff
 
-## Baseline
+## Comparison anchors
 
-The adversarial remediation starts from main commit
-`19d8cf71b2572e4082c82d44a8573b153dcc941d`. That baseline already contained
-the eight-capability CaseWeave milestone, runtime `CalldataAddress` encoding,
-execution-result checks, a trusted-court consumer, and the first fail-closed
-appeal guard. The prior corrected deployment was
-`0x99be950790dEec2F474e5F6E55845eF75D8872a0`.
+- Locked security-remediation baseline: `19d8cf71b2572e4082c82d44a8573b153dcc941d`
+- Engineering handoff observed main: `21063992ffedda2495874ef98b658ddf10f01a4c`
+- Final implementation commit: recorded by `git rev-parse HEAD` in the release
+  handoff after the final commit and push.
+
+The final diff is limited to deadline liveness, settlement-receiver recovery
+safety, bounded live-test retries/evidence handling, active deployment
+references, and release documentation. No milestone capability was rebuilt.
 
 ## Before / after security matrix
 
-| Area | Baseline weakness | Final remediation |
+| Area | Before | Final source |
 | --- | --- | --- |
-| Settlement proof | Recipient could submit any 66-character hash; child/parent/value/finality were not proven | `confirm_transfer` is disabled. Court funds enter a one-time configured receiver through an exact-value internal message; the receiver callback binds court, transfer ID, recipient, amount and commitment. EOA withdrawals remain explicitly `withdrawal_submitted` because pinned GenVM cannot query an external receipt. |
-| Judgment settlement | Payout recipient/outcome could come from the superseded first-instance case | Settlement resolves the latest finalized judgment and its canonical role/basis-point remedy; affirmed, modified, reversed, weakened and remanded paths are covered. |
-| Amounts/refunds | Partial/revision outcomes could pay the full committed pool; residual committed funds had no explicit release path | Canonical remedies require bounded amount basis points. Revision/remand has no payout. A successful partial award has an explicit creator remainder refund; failed transfers reconcile and can retry once without duplicate success. Uncommitted and unallocated funds have tracked refund paths. |
-| Evidence challenges | Leader semantic admissibility/credibility/relevance result was not independently checked | Leader and validator independently refetch committed bytes, recompute hashes and compare the complete semantic finding schema before storage changes. |
-| Snapshot finality | Evidence could be mutated after freeze and appeal could read moving evidence | Frozen items reject verification, addition and challenges. Appeals validate the stored snapshot hash/payload and read only that snapshot plus separately versioned verified appeal evidence. Pending challenges block verdict/finalization. |
-| GitHub authenticity | A raw-file HEAD request showed existence, not membership in the commit | GitHub commit API metadata is fetched and exact full SHA, repository URL and changed-file membership are compared. |
-| Consumer trust | Caller supplied an arbitrary court address | Constructor-bound trusted court identity, court-address judgment field, scope/version/current/supersession checks and court-scoped storage keys reject impersonating sources. |
-| Regression evidence | Green CI did not cover the adversarial state transitions | 16 Direct Mode behavioral tests, 20 frontend tests, 2 local plus 2 production browser tests, pinned lint/schema checks, build/type/lint gates and a final multi-wallet StudioNet run. |
+| Deadline liveness | One party could leave a validated proposal unaccepted indefinitely | A bounded, previously validated proposal can activate after its own challenge deadline; the fallback copies exact timestamps and cannot extend them |
+| Withdrawal recovery | Owner-supplied failure hash could reopen custody without a balance guard | Reconciliation requires the active serialized record and unchanged balance checkpoint; the hash is audit metadata, not cryptographic proof |
+| Transfer confirmation | Fabricated child hash was accepted | Manual `confirm_transfer` is fail-closed; court accounting changes only through configured receiver custody callback |
+| Appellate settlement | First-instance outcome could drive payout after supersession | Settlement resolves the current finalized judgment and validates its canonical remedy |
+| Amounts/refunds | Partial/revision paths could overpay or strand remainder | Basis-point remedies, role-bound recipients, explicit remainder/refund accounting, late-funding rejection and idempotent settlement guards |
+| Evidence semantics | Challenge IDs/enums could pass without substantive semantic agreement | Leader and validator independently fetch committed evidence and compare the complete semantic finding schema |
+| Snapshot finality | Historical evidence could move after verdict | Frozen snapshot records reject mutation; appellate evidence is separately versioned and verified |
+| GitHub authenticity | Raw-file existence did not prove commit membership | Authoritative commit API, exact full SHA, repository scope and changed-file membership are checked |
+| Consumer trust | Arbitrary court address could be supplied | Trusted court is constructor-bound and consumed records are namespaced by court identity and judgment ID |
 
-The immutable source diff is the pushed range
-`19d8cf71b2572e4082c82d44a8573b153dcc941d..HEAD`. The final Git commit and
-exact `git diff --stat` are reported in the release handoff; the deployed
-court source is identified independently by its SHA-256 in `DEPLOYMENT.md`.
+## Evidence boundary
 
-No historical deployment is rewritten. Superseded addresses remain labeled as
-historical provenance only.
+The local gates passed. The fresh StudioNet run proved the first-instance path
+and unauthorized appeal rejection on the new contracts, but all five appellate
+consensus attempts returned `MAJORITY_DISAGREE`. No claim is made that the live
+run reached settlement, withdrawal, or consumer consumption. See
+[DEPLOYMENT.md](DEPLOYMENT.md) and [TEST_EVIDENCE.md](TEST_EVIDENCE.md).

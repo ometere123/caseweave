@@ -1,11 +1,12 @@
-# CaseWeave final adversarial-remediation deployment
+# CaseWeave release deployment record
 
-This is the reproducible release record for the focused security remediation
-from baseline commit `19d8cf71b2572e4082c82d44a8573b153dcc941d`. Historical
-deployments remain listed only as provenance; the addresses below are the
-active StudioNet targets.
+This record covers the final adversarial hardening source deployed to
+StudioNet. It is factual: the fresh live run completed through the
+first-instance judgment and unauthorized-appeal rejection, but appellate
+consensus failed closed with `MAJORITY_DISAGREE` on all five bounded attempts.
+It is not presented as a completed end-to-end settlement proof.
 
-## Pinned environment
+## Environment
 
 - Network: `studionet`
 - Chain ID: `61999`
@@ -13,139 +14,102 @@ active StudioNet targets.
 - Explorer: <https://explorer-studio.genlayer.com>
 - Repository-local CLI: `genlayer@0.39.1`
 - SDK: `genlayer-js@1.1.8`
-- Linter: `genvm-linter==0.11.0`
+- GenVM linter: `0.11.0`
 - Compatible runner: `GENVM_VERSION=v0.2.16`
-- Frontend: <https://caseweave.vercel.app>
+- Production: <https://caseweave.vercel.app>
 
-No chain 61997, `studio-dev`, `studio-devnet`, global CLI, private key,
-keystore, or credential is part of the repository.
-
-## Final contracts
+## Active contracts
 
 | Contract | Address | Source SHA-256 |
 | --- | --- | --- |
-| `CaseWeaveCourt` | `0x3BA8098653902c5A5daf08f26A3759fB06C57a2A` | `4793E610064B36E68BFE551D1C06A2E7B26ECBDE174CE94066ABD065E8EF08F8` |
-| `CaseWeaveSettlementReceiver` | `0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f` | `AC8B807454B877C28C9D9C368F56154809A58095450F7347AC0F7F2E9F293386` |
-| `CaseWeaveJudgmentConsumer` | `0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211` | `402BE27C006D12CF61C3F452EBF41887568EDFF8021E7596D76FF295BACB68C8` |
+| `CaseWeaveCourt` | `0x357688E5fc8D433eb2De071fE9ceeDf93eBB024f` | `3FDDDA6866DA094D6F6055F3520DCC08523E9840B183BB63560B7908AD6D4EA0` |
+| `CaseWeaveSettlementReceiver` | `0xeF7c04C58716e00F090b2C9ec305BDae86E0D4F7` | `9D028AF74EA0458018C18351FB513C727BDDD3AB432DB25EABD82FAE91EE0CB3` |
+| `CaseWeaveJudgmentConsumer` | `0x9E4Ecf45C0B356bDc46731A4B862ab3E7Ffa2488` | `402BE27C006D12CF61C3F452EBF41887568EDFF8021E7596D76FF295BACB68C8` |
 
-Deployer and court owner: `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7`.
-Deployed court source commit: `551a2674403ff0c548e684d2320f46966c6e1b19`.
-`get_owner()` and the receiver/consumer trust bindings were read after
-deployment and match this deployment identity. The deployed court source is
-the exact `contracts/caseweave.py` byte content represented by the final
-release source commit; the SHA-256 above was checked by the deployment script
-against the finalized deployment receipt.
+Owner/deployer: `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7`.
+`get_owner()` returned that address. Court → receiver, receiver → court, and
+consumer → court bindings were read after configuration and matched the table.
 
-### Deployment transactions
+## Deployment and configuration receipts
 
-- Receiver deploy: [0x187c4554707c4ed3c7dc13191ff35e07be725aeb4a13ad4351cad00cb27bf866](https://explorer-studio.genlayer.com/tx/0x187c4554707c4ed3c7dc13191ff35e07be725aeb4a13ad4351cad00cb27bf866)
-- Court deploy: [0x6794a8ffc05660e319b679d63ad78c8ab79ec703a6b8011bdf604f80944333ef](https://explorer-studio.genlayer.com/tx/0x6794a8ffc05660e319b679d63ad78c8ab79ec703a6b8011bdf604f80944333ef)
-- Consumer deploy: [0x01056fb613afee39ecff9a161df8ec2048d4b95d7ea4247668164ce248f7f805](https://explorer-studio.genlayer.com/tx/0x01056fb613afee39ecff9a161df8ec2048d4b95d7ea4247668164ce248f7f805)
-- Court → receiver configuration: [0x6246465116127e626dce153a9d0078a1a74906c9b60f0335ed2444a364598c18](https://explorer-studio.genlayer.com/tx/0x6246465116127e626dce153a9d0078a1a74906c9b60f0335ed2444a364598c18)
-- Receiver → court configuration: [0xa2ed141a52a8f51c59e7e33979be0c94a1842cb23882f9c02cc652b385dd31e2](https://explorer-studio.genlayer.com/tx/0xa2ed141a52a8f51c59e7e33979be0c94a1842cb23882f9c02cc652b385dd31e2)
+- Court deploy: [0x8d50201b75c382ccec7bfc4896ab07ed3af330cb5f7db5c7cb1b7a3de1ce6001](https://explorer-studio.genlayer.com/tx/0x8d50201b75c382ccec7bfc4896ab07ed3af330cb5f7db5c7cb1b7a3de1ce6001)
+- Receiver deploy: [0xbbf9bcc30495ab146b6eaa55cf157830b4914dd57e89e010289b050e6579506d](https://explorer-studio.genlayer.com/tx/0xbbf9bcc30495ab146b6eaa55cf157830b4914dd57e89e010289b050e6579506d)
+- Consumer deploy: [0xe2a9e79cb30e0e20a8749be4024ea517aba9117831efc182709c04e3ff9fd99d](https://explorer-studio.genlayer.com/tx/0xe2a9e79cb30e0e20a8749be4024ea517aba9117831efc182709c04e3ff9fd99d)
+- Receiver → court configuration: [0x8cb92506abb2b365312a8fe65a200beb5e9d6d9d8ec6a835aa8136f80b3d7e00](https://explorer-studio.genlayer.com/tx/0x8cb92506abb2b365312a8fe65a200beb5e9d6d9d8ec6a835aa8136f80b3d7e00)
+- Court → receiver configuration: [0x6dc3c0f99db523d4aeae03f73395e46fc524f49d0d0e3ac5f36f2224eddfbdfa](https://explorer-studio.genlayer.com/tx/0x6dc3c0f99db523d4aeae03f73395e46fc524f49d0d0e3ac5f36f2224eddfbdfa)
 
-Every deployment/configuration transaction was finalized with consensus
-result `6` and GenVM execution `SUCCESS`.
+All five receipts finalized with GenVM `SUCCESS`. Live code retrieval matched
+the local source byte-for-byte; the hashes above are SHA-256 of those exact
+source files.
 
-## Canonical live evidence
+## Fresh StudioNet lifecycle record
 
-The complete machine-readable record is
-[`test-evidence/studionet-remediation-final-20261020.json`](test-evidence/studionet-remediation-final-20261020.json).
-It contains 32 finalized application, consumer, custody, and expected-negative
-transactions, full hashes, explorer URLs, GenVM results, object IDs, and
-before/after reads.
+Machine-readable record:
+[`test-evidence/studionet-final-release-hardening-e2e-final-20261020.json`](test-evidence/studionet-final-release-hardening-e2e-final-20261020.json).
+It used the final addresses, two party wallets, the deployment owner, and an
+unrelated third wallet. The source-authentication fixture was the immutable
+`afb440fef324d09de6db12f40804ae9dce815c6e`, whose GitHub API changed-file set
+matches the submitted proof list exactly.
 
-The immutable delivery fixture is
-[`docs/evidence/caseweave-counter-facts.txt`](docs/evidence/caseweave-counter-facts.txt)
-at commit
-[`abd9e03ab772e9ffddc35c1542c6e013470a93d5`](https://github.com/ometere123/caseweave/commit/abd9e03ab772e9ffddc35c1542c6e013470a93d5).
-The successful proof recorded content hash
-`fcfab26fc940c4ac093d8bb1ebad15ce9e27ec36ff7c42c858fdb96f8d67db23` and
-authoritative GitHub API facts for repository `ometere123/caseweave`, the full
-commit SHA, and exact changed-file membership.
+The first 26 application transactions finalized successfully and created
+`AGR_2`, `PROOF_1`, `DIS_1`, `CASE_1`, `JDG_1`, and `APP_1`. The unrelated
+`resolve_appeal` call finalized with `ERROR` and unchanged state. The five
+owner `request_appeal_review` attempts finalized at transaction level but each
+returned GenVM execution error `consensus result MAJORITY_DISAGREE`; therefore
+no appellate judgment or settlement was fabricated or attempted.
 
-## Full StudioNet sequence
-
-All rows marked successful are `FINALIZED` with GenVM `SUCCESS`. The three
-expected-negative rows are finalized rollback transactions whose protected
-state was read before and after.
-
-| # | Method / object | Transaction |
+| # | Method | Transaction |
 | ---: | --- | --- |
-| 1 | `create_technical_agreement` → `AGR_1` | [0x9c396239c3c9254b84ca437e1eeb7fbc0986039d8421515b8aee93457c5261d2](https://explorer-studio.genlayer.com/tx/0x9c396239c3c9254b84ca437e1eeb7fbc0986039d8421515b8aee93457c5261d2) |
-| 2 | `accept_agreement` → active | [0x2a76ddfe0f0504f5fdc9d84ec55b7ce8fa72539bb01d3ad7fb21b3ca03b0003e](https://explorer-studio.genlayer.com/tx/0x2a76ddfe0f0504f5fdc9d84ec55b7ce8fa72539bb01d3ad7fb21b3ca03b0003e) |
-| 3 | `fund_agreement` → 1000 GEN | [0x6bfe18762efa1edf69101e727bfae1650de14bb3195af6e12501c5fc282274c8](https://explorer-studio.genlayer.com/tx/0x6bfe18762efa1edf69101e727bfae1650de14bb3195af6e12501c5fc282274c8) |
-| 4 | `fund_milestone` → 900 GEN committed | [0x00d6d096f4e50f446f216c1584ddf5be3b6a0f9c9b4721a08cd069aab3af9c52](https://explorer-studio.genlayer.com/tx/0x00d6d096f4e50f446f216c1584ddf5be3b6a0f9c9b4721a08cd069aab3af9c52) |
-| 5 | `submit_deliverable` | [0xdc955f25d8f80a595c6631075e2d444e465005083e5fc13096730571a49ebb60](https://explorer-studio.genlayer.com/tx/0xdc955f25d8f80a595c6631075e2d444e465005083e5fc13096730571a49ebb60) |
-| 6 | `register_delivery_proof` → `PROOF_1` | [0x5ba9612b2c805f27437a3a48d2b3fd2b040d932fc299f7b00878dec3bf4afcd8](https://explorer-studio.genlayer.com/tx/0x5ba9612b2c805f27437a3a48d2b3fd2b040d932fc299f7b00878dec3bf4afcd8) |
-| 7 | `verify_delivery_proof` → satisfied source facts | [0x78be1bef422b6b504aadb67828b3cb47d01582596b0749921e23fd03861f604a](https://explorer-studio.genlayer.com/tx/0x78be1bef422b6b504aadb67828b3cb47d01582596b0749921e23fd03861f604a) |
-| 8 | `file_performance_dispute` → `DIS_1` | [0xe3326d469dfe2dcdba73722aac86888a2f012e4b97ce2a5a598200543291ffc2](https://explorer-studio.genlayer.com/tx/0xe3326d469dfe2dcdba73722aac86888a2f012e4b97ce2a5a598200543291ffc2) |
-| 9 | `submit_response` | [0x0ba6080baf66fc9aabeae43b85e43d279578e8d1c7786c013fcb278af9b9bf71](https://explorer-studio.genlayer.com/tx/0x0ba6080baf66fc9aabeae43b85e43d279578e8d1c7786c013fcb278af9b9bf71) |
-| 10 | `verify_evidence_url` → HTTP 200/hash | [0xf82469a8bd4b943879adcb583b1c8d2ede1b4d410505f3cb4fc5099753ef2ba0](https://explorer-studio.genlayer.com/tx/0xf82469a8bd4b943879adcb583b1c8d2ede1b4d410505f3cb4fc5099753ef2ba0) |
-| 11 | `set_appeal_window` → immutable deadline | [0x06c0fa34d470f8e05bf3a1c3bab57b9246465753bbf08e3a68e9d0f3b6ef9e22](https://explorer-studio.genlayer.com/tx/0x06c0fa34d470f8e05bf3a1c3bab57b9246465753bbf08e3a68e9d0f3b6ef9e22) |
-| 12 | `verify_evidence_url` → claimant snapshot | [0x1d0dc5a73bad54dafb0a542c3cc1100581b69d5631e600104a235c232e14ff31](https://explorer-studio.genlayer.com/tx/0x1d0dc5a73bad54dafb0a542c3cc1100581b69d5631e600104a235c232e14ff31) |
-| 13 | `add_evidence` → deployment artifact | [0x1a330a2513a1ac48c20722a7d913097a60291e205e1f5ca7e4b0f1217ede6371](https://explorer-studio.genlayer.com/tx/0x1a330a2513a1ac48c20722a7d913097a60291e205e1f5ca7e4b0f1217ede6371) |
-| 14 | `verify_evidence_url` → artifact verified | [0xa323694aabb35b7a6acabc58ad3f5e7321525dfbfdf727e942f2d7ff3c4d32fe](https://explorer-studio.genlayer.com/tx/0xa323694aabb35b7a6acabc58ad3f5e7321525dfbfdf727e942f2d7ff3c4d32fe) |
-| 15 | `challenge_evidence` | [0x659f424e2331f889eda5616cf37aaa13753c54997749dc6e80270739fb667f5e](https://explorer-studio.genlayer.com/tx/0x659f424e2331f889eda5616cf37aaa13753c54997749dc6e80270739fb667f5e) |
-| 16 | `verify_evidence_url` → counter-evidence | [0xa22c9d0f3fb12dcc610842e55f2ea509743c41c0a5f4526967e5fd50e9bafa21](https://explorer-studio.genlayer.com/tx/0xa22c9d0f3fb12dcc610842e55f2ea509743c41c0a5f4526967e5fd50e9bafa21) |
-| 17 | `resolve_evidence_challenge` → semantic consensus | [0x4a8a9f506a15660c3a7ea3eacf067910718d44ccdddc77c6c49dbdbc3c5ab36c](https://explorer-studio.genlayer.com/tx/0x4a8a9f506a15660c3a7ea3eacf067910718d44ccdddc77c6c49dbdbc3c5ab36c) |
-| 18 | `request_precedent_search` | [0xd70f67daac441482c3182fbeaee033aa15161453100b20acf4a4f28ca4fa8779](https://explorer-studio.genlayer.com/tx/0xd70f67daac441482c3182fbeaee033aa15161453100b20acf4a4f28ca4fa8779) |
-| 19 | `request_verdict` → `claimant_wins` | [0x1aa5a6a85f0d6eab47dd68fa8798264bea9bfcbdf45a026936c5498cf73224cc](https://explorer-studio.genlayer.com/tx/0x1aa5a6a85f0d6eab47dd68fa8798264bea9bfcbdf45a026936c5498cf73224cc) |
-| 20 | `finalize_precedent` → `CASE_1`, `JDG_1` | [0x328dd76054a2029dbfdcbbb6f92d6f7d6c6f8e69daf8e9fd54227ae25d81de5d](https://explorer-studio.genlayer.com/tx/0x328dd76054a2029dbfdcbbb6f92d6f7d6c6f8e69daf8e9fd54227ae25d81de5d) |
-| 21 | `file_appeal` → `APP_1` | [0xf8ce26e24adb39b87b844984af07f51dcf425bb85fd1b150588fc86c1356560d](https://explorer-studio.genlayer.com/tx/0xf8ce26e24adb39b87b844984af07f51dcf425bb85fd1b150588fc86c1356560d) |
-| 22 | unauthorized `resolve_appeal` → unchanged state | [0x7d685d0d17d5752639c0065c22717dd002a23993c59cc813d8c42b0b4ac47d1e](https://explorer-studio.genlayer.com/tx/0x7d685d0d17d5752639c0065c22717dd002a23993c59cc813d8c42b0b4ac47d1e) |
-| 23 | `request_appeal_review` → `JDG_2`, version 2, affirmed | [0xdd0229932663d46e4c30513aebae331a871f4b767f6ec442931aad061334d94a](https://explorer-studio.genlayer.com/tx/0xdd0229932663d46e4c30513aebae331a871f4b767f6ec442931aad061334d94a) |
-| 24 | `release_appeal_bond` → `TR_1`, custody callback | [0x38b8aa92e3a1e3670b13eff04a1c63cd19dd8f13c2df1ffcd9f407c78e31f289](https://explorer-studio.genlayer.com/tx/0x38b8aa92e3a1e3670b13eff04a1c63cd19dd8f13c2df1ffcd9f407c78e31f289) |
-| 25 | fabricated appeal-bond `confirm_transfer` rejected | [0x2f4aa2ced672cbedb82ad5ab94fcd0611b04bc7a543246c5a00e1b5a8f29bf69](https://explorer-studio.genlayer.com/tx/0x2f4aa2ced672cbedb82ad5ab94fcd0611b04bc7a543246c5a00e1b5a8f29bf69) |
-| 26 | `withdraw(TR_1)` → successful child | [0xceae844c7452ea615589829d82c4765c2e432347c122978c4db0ef0abe803a57](https://explorer-studio.genlayer.com/tx/0xceae844c7452ea615589829d82c4765c2e432347c122978c4db0ef0abe803a57) |
-| 27 | `release_withdrawal_lock(TR_1)` → child recorded | [0x71276c72d2993e1a38791b90532232b4886bd1529607175a39f67f986287caa7](https://explorer-studio.genlayer.com/tx/0x71276c72d2993e1a38791b90532232b4886bd1529607175a39f67f986287caa7) |
-| 28 | consumer `consume_judgment` → `JDG_2`, v2 | [0xccdc0e2e0d86d2e073a1af357fb5c184061d4a81f293ffddb48c2c7a28337875](https://explorer-studio.genlayer.com/tx/0xccdc0e2e0d86d2e073a1af357fb5c184061d4a81f293ffddb48c2c7a28337875) |
-| 29 | `settle_judgment` → `TR_2`, 900 GEN | [0xe78408e8bdb53fe194c079f831465f131610ea2553c434926495e96db3e79575](https://explorer-studio.genlayer.com/tx/0xe78408e8bdb53fe194c079f831465f131610ea2553c434926495e96db3e79575) |
-| 30 | fabricated settlement `confirm_transfer` rejected | [0x8904f983d7fb737d6d8a3bad9e564d77379dcc235a202b4cc0cb4688364b59d8](https://explorer-studio.genlayer.com/tx/0x8904f983d7fb737d6d8a3bad9e564d77379dcc235a202b4cc0cb4688364b59d8) |
-| 31 | `withdraw(TR_2)` → successful child | [0x87698f3f355b0428775e81614d42676fedb08bda563987a9965a4a371c45d3d6](https://explorer-studio.genlayer.com/tx/0x87698f3f355b0428775e81614d42676fedb08bda563987a9965a4a371c45d3d6) |
-| 32 | duplicate `settle_judgment` rejected | [0x9e62d42115a99b80e6cc0924125287430b5caca61eed09e846d9c3e07de9fb79](https://explorer-studio.genlayer.com/tx/0x9e62d42115a99b80e6cc0924125287430b5caca61eed09e846d9c3e07de9fb79) |
+| 1 | `create_technical_agreement` → `AGR_2` | [0x7a78e76354511d2e92f04afdea390f0f4adc470c6749307bbaf743d38f942faf](https://explorer-studio.genlayer.com/tx/0x7a78e76354511d2e92f04afdea390f0f4adc470c6749307bbaf743d38f942faf) |
+| 2 | `accept_agreement` | [0x21aed688358875ac36c11694e854bfb231005f2d18d516294100d2e6253d13b2](https://explorer-studio.genlayer.com/tx/0x21aed688358875ac36c11694e854bfb231005f2d18d516294100d2e6253d13b2) |
+| 3 | `fund_agreement` → 1000 GEN | [0xf2e9fa3802c82b19c0c1177b5ed89dfbd3fdb50a40f47c553e825c99ea26f579](https://explorer-studio.genlayer.com/tx/0xf2e9fa3802c82b19c0c1177b5ed89dfbd3fdb50a40f47c553e825c99ea26f579) |
+| 4 | `fund_milestone` → 900 GEN | [0x3e60e5f814f7ac93cd5af81439a85c08dd15e683c2ff7528a521d192fe74c704](https://explorer-studio.genlayer.com/tx/0x3e60e5f814f7ac93cd5af81439a85c08dd15e683c2ff7528a521d192fe74c704) |
+| 5 | `submit_deliverable` | [0xb07410ee9ea3ae18d3eaad639de8936dcbe09b76c64e323ff838bf0f3c46a97f](https://explorer-studio.genlayer.com/tx/0xb07410ee9ea3ae18d3eaad639de8936dcbe09b76c64e323ff838bf0f3c46a97f) |
+| 6 | `register_delivery_proof` → `PROOF_1` | [0xee595d09281081436c4472aa3dfde602579f42b015becc307dce2a9c81bff41d](https://explorer-studio.genlayer.com/tx/0xee595d09281081436c4472aa3dfde602579f42b015becc307dce2a9c81bff41d) |
+| 7 | `verify_delivery_proof` → verified source facts | [0x177479faf658916e226157bd4305ed2b45ba9db6f635fbd22331f3ca52649b53](https://explorer-studio.genlayer.com/tx/0x177479faf658916e226157bd4305ed2b45ba9db6f635fbd22331f3ca52649b53) |
+| 8 | `file_performance_dispute` → `DIS_1` | [0xb2d05259e19c8b4dcbfce55895bbd573d0a1c070dcb94b674b242c9a02e39ac9](https://explorer-studio.genlayer.com/tx/0xb2d05259e19c8b4dcbfce55895bbd573d0a1c070dcb94b674b242c9a02e39ac9) |
+| 9 | `submit_response` | [0xa37166ce962830faa8f7ddd663a73bda5d2be17b4a6ce31676316c4646ae46c7](https://explorer-studio.genlayer.com/tx/0xa37166ce962830faa8f7ddd663a73bda5d2be17b4a6ce31676316c4646ae46c7) |
+| 10 | `verify_evidence_url` → respondent evidence | [0x2732ea9f17c8c15c085ef8c6f35b66d2ad05ba903369462b01412280a6a0494f](https://explorer-studio.genlayer.com/tx/0x2732ea9f17c8c15c085ef8c6f35b66d2ad05ba903369462b01412280a6a0494f) |
+| 11 | `set_dispute_deadlines` → proposed | [0x38fbafe5be415b37cc7ff64b7ad5573a253032ee0a8ec25ea0659598da5827dd](https://explorer-studio.genlayer.com/tx/0x38fbafe5be415b37cc7ff64b7ad5573a253032ee0a8ec25ea0659598da5827dd) |
+| 12 | `set_dispute_deadlines` → accepted | [0x2260bef2a07491cc4e26c2e51346cd918179ff5fef96821373a5cb550eba6ab7](https://explorer-studio.genlayer.com/tx/0x2260bef2a07491cc4e26c2e51346cd918179ff5fef96821373a5cb550eba6ab7) |
+| 13 | `set_appeal_window` → proposed | [0xa0e285a6965b26db8593486bd682068be66d80cc4efa4be885b4fe3d468c5cc0](https://explorer-studio.genlayer.com/tx/0xa0e285a6965b26db8593486bd682068be66d80cc4efa4be885b4fe3d468c5cc0) |
+| 14 | `set_appeal_window` → accepted | [0x967502837628d19a9942fd71a9385616650b078c97619bb0c5f1fcadc8b86986](https://explorer-studio.genlayer.com/tx/0x967502837628d19a9942fd71a9385616650b078c97619bb0c5f1fcadc8b86986) |
+| 15 | `verify_evidence_url` → claimant snapshot | [0x5c042a6479291d91895c730a8391cb8037792bc1b5e4d163d6edad59efed6144](https://explorer-studio.genlayer.com/tx/0x5c042a6479291d91895c730a8391cb8037792bc1b5e4d163d6edad59efed6144) |
+| 16 | `add_evidence` → GitHub commit metadata | [0x4a133fd631c9edf5e6fdabeade10b7021cd058f2ed17924d5092941eb624ce2d](https://explorer-studio.genlayer.com/tx/0x4a133fd631c9edf5e6fdabeade10b7021cd058f2ed17924d5092941eb624ce2d) |
+| 17 | `verify_evidence_url` → source facts | [0xbd02741d3e7452d7eb2445a5a4142c70fc73de8faee64f6997189bdc0dbaa869](https://explorer-studio.genlayer.com/tx/0xbd02741d3e7452d7eb2445a5a4142c70fc73de8faee64f6997189bdc0dbaa869) |
+| 18 | `challenge_evidence` | [0xdf15dad42d8ac39bde10e8e0551c6dadb090ea76bb1517db8c1d497392b00a35](https://explorer-studio.genlayer.com/tx/0xdf15dad42d8ac39bde10e8e0551c6dadb090ea76bb1517db8c1d497392b00a35) |
+| 19 | `verify_evidence_url` → counter-evidence | [0xd647641eb9dd577193e28c60ff886d50bc53b22de2878f6091738566069fa03c](https://explorer-studio.genlayer.com/tx/0xd647641eb9dd577193e28c60ff886d50bc53b22de2878f6091738566069fa03c) |
+| 20 | `resolve_evidence_challenge` | [0x3b19b588679275db30e79bbfb9f0cea62a7c50f6b32959c0c12e2f4d6c8754bf](https://explorer-studio.genlayer.com/tx/0x3b19b588679275db30e79bbfb9f0cea62a7c50f6b32959c0c12e2f4d6c8754bf) |
+| 21 | `request_precedent_search` | [0xc2f66dc00c3cfa97bb3d73ab61db95cc6adba5c1d25698462e71267bd1e183e9](https://explorer-studio.genlayer.com/tx/0xc2f66dc00c3cfa97bb3d73ab61db95cc6adba5c1d25698462e71267bd1e183e9) |
+| 22 | `request_verdict` → claimant wins | [0x6a5c83f8a7ffe93b9304dc6dde20d2b5cb28e9b069c0bb9d477135a3d4a08c22](https://explorer-studio.genlayer.com/tx/0x6a5c83f8a7ffe93b9304dc6dde20d2b5cb28e9b069c0bb9d477135a3d4a08c22) |
+| 23 | `finalize_precedent` → `CASE_1`, `JDG_1` | [0x1755d2afa44b65298306a0edb13ef33f730bac3e97faf045fa91cb4cba36f1e2](https://explorer-studio.genlayer.com/tx/0x1755d2afa44b65298306a0edb13ef33f730bac3e97faf045fa91cb4cba36f1e2) |
+| 24 | `file_appeal` → `APP_1` | [0xc42b56f8f2596289a4673cd0c020f7933751c9871c8099cedf9e6609be4bfcd9](https://explorer-studio.genlayer.com/tx/0xc42b56f8f2596289a4673cd0c020f7933751c9871c8099cedf9e6609be4bfcd9) |
+| 25 | `add_appeal_evidence` | [0xbcd253c35dcd0e082769040da6855c2430bc6b753daf9140d225ee183283c53b](https://explorer-studio.genlayer.com/tx/0xbcd253c35dcd0e082769040da6855c2430bc6b753daf9140d225ee183283c53b) |
+| 26 | `verify_evidence_url` → appellate evidence | [0xe3bfaa2b8bcec41bb9a8b9b473dc95447a532641ec92ff4ea95676082da98ddb](https://explorer-studio.genlayer.com/tx/0xe3bfaa2b8bcec41bb9a8b9b473dc95447a532641ec92ff4ea95676082da98ddb) |
+| 27 | unauthorized `resolve_appeal` → unchanged | [0x693bad387ed7accff1ac82130e6f892de592b234e2e9bbd6f101f6c2b4b26a52](https://explorer-studio.genlayer.com/tx/0x693bad387ed7accff1ac82130e6f892de592b234e2e9bbd6f101f6c2b4b26a52) |
+| 28 | `request_appeal_review` attempt 1 → `MAJORITY_DISAGREE` | [0x57693980329f29bafef56a073a8f414c74ddae2408fab1137f6a015a75e10d4b](https://explorer-studio.genlayer.com/tx/0x57693980329f29bafef56a073a8f414c74ddae2408fab1137f6a015a75e10d4b) |
+| 29 | `request_appeal_review` attempt 2 → `MAJORITY_DISAGREE` | [0x5c273fc14a2ec37d92be9595c425a8ed5c605aa82fc4c99a0d8a7f30b9225274](https://explorer-studio.genlayer.com/tx/0x5c273fc14a2ec37d92be9595c425a8ed5c605aa82fc4c99a0d8a7f30b9225274) |
+| 30 | `request_appeal_review` attempt 3 → `MAJORITY_DISAGREE` | [0x5e472898dfca691e7be7cf39b4243032e3a587a76a704d92c418462274977071](https://explorer-studio.genlayer.com/tx/0x5e472898dfca691e7be7cf39b4243032e3a587a76a704d92c418462274977071) |
+| 31 | `request_appeal_review` attempt 4 → `MAJORITY_DISAGREE` | [0xc6e6dfc8bf434b880c9b997a0c72de2d1b0289af8ef2da12d6438e721935a192](https://explorer-studio.genlayer.com/tx/0xc6e6dfc8bf434b880c9b997a0c72de2d1b0289af8ef2da12d6438e721935a192) |
+| 32 | `request_appeal_review` attempt 5 → `MAJORITY_DISAGREE` | [0xa2e8d11e76ff9ace59fa0bba0be015999b78032085f04ccd427346f6ac3eefc6](https://explorer-studio.genlayer.com/tx/0xa2e8d11e76ff9ace59fa0bba0be015999b78032085f04ccd427346f6ac3eefc6) |
 
-The `TR_2` custody child is
-[0x8c7c865c33f1e5878629afe416e25a8196537793817bbbfcd4b5209c33f6d83f](https://explorer-studio.genlayer.com/tx/0x8c7c865c33f1e5878629afe416e25a8196537793817bbbfcd4b5209c33f6d83f)
-and the trusted callback child is
-[0x230f66b9537ea99db390d8306a119d53136d7d86a15377382ff2582422524eb7](https://explorer-studio.genlayer.com/tx/0x230f66b9537ea99db390d8306a119d53136d7d86a15377382ff2582422524eb7).
-The receiver's EOA withdrawal status intentionally remains
-`withdrawal_submitted`: pinned GenVM cannot independently query an external
-EOA receipt, so the owner-recorded child hash only records the observation and
-never marks court accounting as paid.
+The last five rows are rejected executions, not completed appellate decisions.
+No settlement, custody, withdrawal, or judgment-consumer write was attempted
+after the failed appeal consensus.
 
-## Final state and security proofs
+## On-chain source and security checks
 
-- Current judgment: `JDG_2`, version 2, `claimant_wins`, `affirmed`, closed;
-  snapshot hash `374a04de9393f0780d2053c9223954bf59eec847d3650769c4da89a6cf730b1d`.
-- Precedent: `CASE_1`, active, public, outcome `claimant_wins`.
-- Settlement transfer: `TR_2`, 900 GEN, committed source, receiver custody
-  reached only through the configured court callback.
-- Final escrow read: `actual_deposited=1001`, `available=100`,
-  `committed=0`, `reserved=0`, `pending_transfer=0`, `settled=901`,
-  `failed_transfer_balance=0`, `contract_balance=100`,
-  `total_accounted_assets=100`, `total_liabilities=100`, `solvent=true`.
-- Consumer read: trusted court is the new court address; it stored `AGR_1`,
-  `DIS_1`, `CASE_1`, `JDG_2`, version 2, the same snapshot hash, and outcome.
-- Fabricated hashes and duplicate settlement finalized with GenVM `ERROR`;
-  each before/after read remained unchanged.
+- Court, receiver, and consumer source retrieval matched the local files and
+  SHA-256 values above.
+- Court owner, receiver binding, and consumer trust binding were read on-chain.
+- The fresh run proved typed agreement parties, real GEN funding, objective
+  GitHub source facts, frozen evidence/challenge gating, first-instance
+  consensus, an immutable `CASE_1`/`JDG_1`, and unauthorized appeal rejection.
+- Appellate failure remained fail-closed; protected first-instance state was not
+  overwritten by a fabricated result.
 
-## Production
+## Production configuration
 
-The Vercel production variables were updated to the three addresses above and
-chain `61999`. A READY production deployment of this remediation code was
-verified from Git commit
-`c6bd1e9f59884a140f1a58ba05302290d457c491`:
-[Vercel deployment](https://vercel.com/delealufejoel-4184s-projects/caseweave/GfeDzp9qqSxcHSe4exaytxDAM66G).
-The alias is <https://caseweave.vercel.app>. Production verification returned
-HTTP 200 for `/agreements/new`, found the new court address and the compiled
-20-byte `CalldataAddress` conversion in the client bundle, and found no
-superseded court address.
-
-## Historical addresses
-
-- `0x99be950790dEec2F474e5F6E55845eF75D8872a0` — prior corrected deployment.
-- `0xBcD6A69Ca192528C65C67417BfE2dB7c2369215a` — superseded milestone
-  deployment before this final adversarial remediation.
-
-They are not active frontend targets.
+Vercel production variables were updated to the active addresses and chain
+`61999`. The final frontend deployment URL and CI run are recorded in
+`FINAL_RELEASE_REVIEW.md`. Historical addresses are not active configuration.

@@ -65,9 +65,9 @@ wallet-connected courtroom/audit UX.
 
 The historical milestone deployment is retained in the deployment record. The
 final adversarial-remediation deployment supersedes it with court
-`0x3BA8098653902c5A5daf08f26A3759fB06C57a2A`, custody receiver
-`0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f`, and trusted judgment consumer
-`0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211`; its source hashes and
+`0x357688E5fc8D433eb2De071fE9ceeDf93eBB024f`, custody receiver
+`0xeF7c04C58716e00F090b2C9ec305BDae86E0D4F7`, and trusted judgment consumer
+`0x9E4Ecf45C0B356bDc46731A4B862ab3E7Ffa2488`; its source hashes and
 configuration transactions are recorded in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 The security release adds independently reconciled custody callbacks, bounded
@@ -77,8 +77,10 @@ consensus, and trusted-court identity binding for the consumer. Its fresh
 StudioNet run is recorded in `test-evidence/` and the final reviewer evidence
 report.
 
-The final run created `AGR_1`, `PROOF_1`, `DIS_1`, `CASE_1`, `APP_1`, and
-current judgment `JDG_2`; it produced 32 finalized transactions including
-expected fail-closed fake-hash, unauthorized-resolver, and duplicate-settlement
-rejections. The final court source SHA-256 is
-`4793E610064B36E68BFE551D1C06A2E7B26ECBDE174CE94066ABD065E8EF08F8`.
+The fresh final-address run created `AGR_2`, `PROOF_1`, `DIS_1`, `CASE_1`,
+`JDG_1`, and `APP_1`; it recorded 32 finalized application transactions,
+including an expected unauthorized-resolver rejection. The five bounded
+appellate requests failed closed with `MAJORITY_DISAGREE`, so no `JDG_2`,
+settlement, or consumer write is claimed from that run. The final court source
+SHA-256 is
+`3FDDDA6866DA094D6F6055F3520DCC08523E9840B183BB63560B7908AD6D4EA0`.

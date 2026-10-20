@@ -27,6 +27,12 @@ MAX_RESPONSE_DEADLINE_SECONDS = 7 * 24 * 60 * 60
 MAX_CHALLENGE_DEADLINE_SECONDS = 14 * 24 * 60 * 60
 MAX_APPEAL_DEADLINE_SECONDS = 30 * 24 * 60 * 60
 
+# A party may propose the exact procedure, but cannot hold the case open
+# forever by refusing to accept it.  The deterministic fallback can only
+# activate after the already-proposed final procedural deadline has elapsed;
+# it never invents or extends a deadline.
+FALLBACK_DEADLINE_STATUS = "fallback_accepted"
+
 EVIDENCE_STATUSES = {
     "unverified", "verified", "failed_fetch", "invalid_url", "unstable", "not_relevant",
 }
@@ -1609,7 +1615,7 @@ Include exactly one finding for every expected obligation id.
         if dispute.status not in ("awaiting_response", "awaiting_precedent_search"):
             raise gl.vm.UserError("deadlines can only be set before a verdict")
         current = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
-        if current.get("deadlines_status") == "accepted":
+        if current.get("deadlines_status") in ("accepted", FALLBACK_DEADLINE_STATUS):
             raise gl.vm.UserError("procedure deadlines are already mutually accepted")
         response_deadline = self._validate_deadline(
             response_deadline, "response_deadline", MAX_RESPONSE_DEADLINE_SECONDS
@@ -1643,6 +1649,42 @@ Include exactly one finding for every expected obligation id.
         self.dispute_procedure_json[dispute_id] = json.dumps(current, sort_keys=True)
 
     @gl.public.write
+    def activate_proposed_deadlines(self, dispute_id: str) -> None:
+        """Commit an unaccepted proposal after its bounded end time.
+
+        This is a liveness fallback, not a unilateral deadline setter.  The
+        effective timestamps are copied byte-for-byte from the proposal that
+        was already validated and stored.  A party can activate them only
+        after the proposed challenge deadline has elapsed, so an uncooperative
+        counterparty cannot keep the case in an uncommitted procedural state
+        indefinitely.
+        """
+        if dispute_id not in self.disputes:
+            raise gl.vm.UserError("dispute not found")
+        dispute = self.disputes[dispute_id]
+        if gl.message.sender_address not in (dispute.claimant, dispute.respondent):
+            raise gl.vm.UserError("only a dispute party may activate the deadline fallback")
+        procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
+        if procedure.get("deadlines_status") != "proposed":
+            raise gl.vm.UserError("there is no unaccepted deadline proposal")
+        response_deadline = str(procedure.get("proposed_response_deadline", ""))
+        challenge_deadline = str(procedure.get("proposed_challenge_deadline", ""))
+        if not response_deadline or not challenge_deadline:
+            raise gl.vm.UserError("deadline proposal is incomplete")
+        if self._runtime_timestamp_seconds() <= self._utc_timestamp_seconds(
+            challenge_deadline, "challenge_deadline"
+        ):
+            raise gl.vm.UserError("deadline fallback is not yet available")
+        procedure["response_deadline"] = response_deadline
+        procedure["challenge_deadline"] = challenge_deadline
+        procedure["deadlines_status"] = FALLBACK_DEADLINE_STATUS
+        procedure["deadlines_accepted_by"] = [
+            str(procedure.get("deadlines_proposed_by", "")),
+            "bounded-fallback",
+        ]
+        self.dispute_procedure_json[dispute_id] = json.dumps(procedure, sort_keys=True)
+
+    @gl.public.write
     def set_appeal_window(self, dispute_id: str, appeal_deadline: str) -> None:
         if dispute_id not in self.disputes:
             raise gl.vm.UserError("dispute not found")
@@ -1652,9 +1694,9 @@ Include exactly one finding for every expected obligation id.
         if dispute.status not in ("awaiting_response", "awaiting_precedent_search", "awaiting_verdict"):
             raise gl.vm.UserError("appeal window must be committed before a verdict")
         procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
-        if procedure.get("deadlines_status") != "accepted":
+        if procedure.get("deadlines_status") not in ("accepted", FALLBACK_DEADLINE_STATUS):
             raise gl.vm.UserError("the dispute procedure must be mutually accepted first")
-        if procedure.get("appeal_deadline_status") == "accepted":
+        if procedure.get("appeal_deadline_status") in ("accepted", FALLBACK_DEADLINE_STATUS):
             raise gl.vm.UserError("appeal window is already mutually accepted")
         appeal_deadline = self._validate_deadline(
             appeal_deadline, "appeal_deadline", MAX_APPEAL_DEADLINE_SECONDS
@@ -1680,6 +1722,35 @@ Include exactly one finding for every expected obligation id.
         self.dispute_procedure_json[dispute_id] = json.dumps(procedure, sort_keys=True)
 
     @gl.public.write
+    def activate_proposed_appeal_window(self, dispute_id: str) -> None:
+        """Commit an unaccepted appeal window after its own bounded end time."""
+        if dispute_id not in self.disputes:
+            raise gl.vm.UserError("dispute not found")
+        dispute = self.disputes[dispute_id]
+        if gl.message.sender_address not in (dispute.claimant, dispute.respondent):
+            raise gl.vm.UserError("only a dispute party may activate the appeal fallback")
+        procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
+        if procedure.get("deadlines_status") not in ("accepted", FALLBACK_DEADLINE_STATUS):
+            raise gl.vm.UserError("the dispute procedure is not committed")
+        if procedure.get("appeal_deadline_status") != "proposed":
+            raise gl.vm.UserError("there is no unaccepted appeal-window proposal")
+        appeal_deadline = str(procedure.get("proposed_appeal_deadline", ""))
+        if not appeal_deadline:
+            raise gl.vm.UserError("appeal-window proposal is incomplete")
+        if self._runtime_timestamp_seconds() <= self._utc_timestamp_seconds(
+            appeal_deadline, "appeal_deadline"
+        ):
+            raise gl.vm.UserError("appeal fallback is not yet available")
+        procedure["appeal_deadline"] = appeal_deadline
+        procedure["appeal_deadline_status"] = FALLBACK_DEADLINE_STATUS
+        procedure["appeal_deadline_accepted_by"] = [
+            str(procedure.get("appeal_deadline_proposed_by", "")),
+            "bounded-fallback",
+        ]
+        procedure["appeal_window_closed"] = False
+        self.dispute_procedure_json[dispute_id] = json.dumps(procedure, sort_keys=True)
+
+    @gl.public.write
     def advance_after_response_deadline(self, dispute_id: str) -> None:
         if dispute_id not in self.disputes:
             raise gl.vm.UserError("dispute not found")
@@ -1689,7 +1760,7 @@ Include exactly one finding for every expected obligation id.
         if gl.message.sender_address not in (dispute.claimant, dispute.respondent):
             raise gl.vm.UserError("only a dispute party may advance procedure")
         procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
-        if procedure.get("deadlines_status") != "accepted":
+        if procedure.get("deadlines_status") not in ("accepted", FALLBACK_DEADLINE_STATUS):
             raise gl.vm.UserError("response deadline policy is not mutually accepted")
         deadline = str(procedure.get("response_deadline", ""))
         if not deadline or self._runtime_timestamp_seconds() <= self._utc_timestamp_seconds(deadline, "response_deadline"):
@@ -2618,7 +2689,7 @@ The requested outcome is an input label, not a verdict category.
             raise gl.vm.UserError("missing verdict data")
 
         procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
-        if procedure.get("appeal_deadline_status") != "accepted" or not procedure.get("appeal_deadline"):
+        if procedure.get("appeal_deadline_status") not in ("accepted", FALLBACK_DEADLINE_STATUS) or not procedure.get("appeal_deadline"):
             raise gl.vm.UserError("a mutually accepted appeal window is required before finalization")
         for challenge in self.evidence_challenges.values():
             if challenge.dispute_id == dispute_id and challenge.status == "pending":
@@ -2805,7 +2876,7 @@ The requested outcome is an input label, not a verdict category.
         if dispute.status != "finalized":
             raise gl.vm.UserError("only finalized disputes have an appeal window")
         procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
-        if procedure.get("appeal_deadline_status") != "accepted":
+        if procedure.get("appeal_deadline_status") not in ("accepted", FALLBACK_DEADLINE_STATUS):
             raise gl.vm.UserError("appeal window is not mutually accepted")
         deadline = str(procedure.get("appeal_deadline", ""))
         if not deadline or self._runtime_timestamp_seconds() <= self._utc_timestamp_seconds(deadline, "appeal_deadline"):
@@ -2888,7 +2959,7 @@ The requested outcome is an input label, not a verdict category.
         procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
         if procedure.get("appeal_window_closed"):
             raise gl.vm.UserError("appeal window is closed")
-        if procedure.get("appeal_deadline_status") != "accepted" or not procedure.get("appeal_deadline"):
+        if procedure.get("appeal_deadline_status") not in ("accepted", FALLBACK_DEADLINE_STATUS) or not procedure.get("appeal_deadline"):
             raise gl.vm.UserError("appeal window is not mutually accepted")
         if self._runtime_timestamp_seconds() > self._utc_timestamp_seconds(str(procedure["appeal_deadline"]), "appeal_deadline"):
             raise gl.vm.UserError("appeal deadline has elapsed")

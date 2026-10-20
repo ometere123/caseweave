@@ -37,7 +37,7 @@
 | Policy weakening or unauthorized precedent mutation | Committed policy checks, bounded candidates, conflict detection, immutable treatments and case history |
 | Double payout/unsupported recipient | Current-judgment remedy resolution, role-bound recipients, one settlement/refund record per judgment, one active transfer, committed/reserved balances and receiver-only custody callback |
 | Fake or unrelated child hash | `confirm_transfer` always reverts. Court custody is confirmed only by the configured receiver, which echoes transfer ID, receiver, beneficiary, amount and commitment; EOA withdrawal hashes never change court accounting |
-| Failed child transfer | Registered `__on_errored_message__` restores the receiver record; the court has explicit failed/reconciled accounting and retry semantics, with no owner method that can reopen a withdrawal from an asserted hash |
+| Failed child transfer | Runtime failure callbacks restore the serialized receiver record; owner reconciliation additionally requires the active record's unchanged native-balance checkpoint. The supplied child hash is only an operator audit reference, not cryptographic proof |
 | Concurrent receiver withdrawals | `active_withdrawal_id` serializes beneficiary child transfers. A second custody record cannot overwrite the lock, and the error callback can only restore the record named by the active lock |
 | Unilateral deadline extension | Strict `YYYY-MM-DDTHH:MM:SSZ` parsing, UTC calendar validation, minimum delay, bounded maxima, bilateral exact-value acceptance, and immutable post-acceptance procedure state |
 | Late deposits or trapped refunds | Active agreements accept only creator funding; resolved agreements reject late agreement funding. Plain-value deposits use an address-keyed unallocated ledger and both available/unallocated balances have tracked custody refunds |
@@ -49,12 +49,13 @@
 
 External APIs can be unavailable or rate-limited. CaseWeave fails closed for
 irreversible proof, verdict and appellate effects when the required facts do
-not reach consensus; a live StudioNet run observed and recorded one such
-`MAJORITY_DISAGREE` evidence attempt without a state change. The pinned GenVM
-runtime does not expose an in-contract receipt query for a transfer from the
-custody receiver to an external EOA.
-The receiver therefore records `withdrawal_submitted` and an owner-released,
-externally inspected child hash only as operational audit data; it never turns
-that observation into court settlement proof. A failed child is restored by
-the runtime error callback, and production monitoring must retain the child
-receipt and explorer evidence.
+not reach consensus; the fresh StudioNet run recorded five appellate
+`MAJORITY_DISAGREE` executions without mutating the first-instance judgment.
+The pinned GenVM runtime does not expose an in-contract receipt query for a
+transfer from the custody receiver to an external EOA. The receiver therefore
+records `withdrawal_submitted`; an owner-released, externally inspected child
+hash is operational audit data only and never turns into court settlement
+proof. The balance checkpoint prevents reopening a successful debit, but it is
+a solvency guard rather than cryptographic receipt verification. A failed child
+is restored by the runtime error callback, and production monitoring must
+retain the child receipt and explorer evidence.

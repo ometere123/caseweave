@@ -9,7 +9,8 @@ through a finalized internal message.  The receiver accepts funds only from
 the configured court, stores the exact beneficiary/amount/commitment, and
 emits a finalized callback to the court.  A beneficiary then pulls the funds
 from this custody contract in a separate, independently observable child
-transaction.  No caller-supplied transaction hash can change court accounting.
+transaction.  A caller-supplied hash is only an operator audit reference; it
+is never cryptographic proof of delivery.
 """
 
 from dataclasses import dataclass
@@ -30,6 +31,7 @@ class CustodyRecord:
     withdrawal_submitted_at: str
     withdrawal_child_transaction_id: str
     withdrawal_failure_child_transaction_id: str
+    withdrawal_balance_before: u256
 
 
 class CaseWeaveSettlementReceiver(gl.Contract):
@@ -83,6 +85,14 @@ class CaseWeaveSettlementReceiver(gl.Contract):
         if amount <= 0 or int(gl.message.value) != amount:
             raise gl.vm.UserError("custody value must equal the declared amount")
 
+        # New trusted-court custody deposits remain admissible while a
+        # beneficiary withdrawal is pending.  Include them in the active
+        # record's balance checkpoint so a later failed-child reconciliation
+        # cannot mistake a legitimate deposit for proof that the child failed.
+        if self.active_withdrawal_id:
+            active_record = self.records[self.active_withdrawal_id]
+            active_record.withdrawal_balance_before += u256(amount)
+
         self.records[transfer_id] = CustodyRecord(
             transfer_id=transfer_id,
             court=self.trusted_court,
@@ -94,6 +104,7 @@ class CaseWeaveSettlementReceiver(gl.Contract):
             withdrawal_submitted_at="",
             withdrawal_child_transaction_id="",
             withdrawal_failure_child_transaction_id="",
+            withdrawal_balance_before=u256(0),
         )
 
         # This is the only court accounting callback.  The court accepts it
@@ -145,6 +156,7 @@ class CaseWeaveSettlementReceiver(gl.Contract):
             raise gl.vm.UserError("another beneficiary withdrawal is pending")
         record.status = "withdrawal_submitted"
         record.withdrawal_submitted_at = gl.message_raw["datetime"]
+        record.withdrawal_balance_before = u256(int(self.balance))
         self.active_withdrawal_id = transfer_id
 
         @gl.evm.contract_interface
@@ -192,15 +204,18 @@ class CaseWeaveSettlementReceiver(gl.Contract):
     def reconcile_failed_withdrawal(
         self, transfer_id: str, child_transaction_id: str
     ) -> None:
-        """Reopen custody only after the receiver owner inspected a failed child.
+        """Reopen custody only after a balance-preserving failed child.
 
         GenVM error callbacks do not identify the originating EOA child.  The
         callback below is therefore deliberately non-mutating.  This narrow
-        owner operation is the explicit recovery hook after an external
-        operator has verified that the named child failed.  It never marks a
-        payment delivered and it is valid only for the currently serialized
-        withdrawal lock, so a stale callback cannot alter another beneficiary's
-        record.
+        owner operation records the externally inspected child hash, but it
+        additionally requires that the receiver's native balance is exactly
+        the balance captured before the child was submitted.  A successful
+        child debit therefore cannot be reopened into a second claim.  New
+        trusted-court custody deposits remain allowed, but are added to the
+        checkpoint so they cannot be mistaken for proof that the child failed.
+        The balance check is a runtime solvency guard, not a cryptographic
+        receipt proof; the operator must still inspect the finalized child.
         """
         if gl.message.sender_address != self.owner:
             raise gl.vm.UserError("only the receiver owner may reconcile a failed withdrawal")
@@ -209,6 +224,12 @@ class CaseWeaveSettlementReceiver(gl.Contract):
         record = self.records[transfer_id]
         if record.status != "withdrawal_submitted" or self.active_withdrawal_id != transfer_id:
             raise gl.vm.UserError("withdrawal failure is not the active record")
+        if int(record.withdrawal_balance_before) <= 0:
+            raise gl.vm.UserError("withdrawal has no captured balance checkpoint")
+        if int(self.balance) != int(record.withdrawal_balance_before):
+            raise gl.vm.UserError(
+                "receiver balance changed; successful or externally altered child cannot be reopened"
+            )
         record.withdrawal_failure_child_transaction_id = self._valid_child_transaction_id(
             child_transaction_id
         )
@@ -243,6 +264,7 @@ class CaseWeaveSettlementReceiver(gl.Contract):
             "withdrawal_submitted_at": record.withdrawal_submitted_at,
             "withdrawal_child_transaction_id": record.withdrawal_child_transaction_id,
             "withdrawal_failure_child_transaction_id": record.withdrawal_failure_child_transaction_id,
+            "withdrawal_balance_before": int(record.withdrawal_balance_before),
         }
 
     @gl.public.write.payable

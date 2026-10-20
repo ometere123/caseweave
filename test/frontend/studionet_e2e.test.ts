@@ -23,13 +23,13 @@ import { resolveCreatedAgreementId } from "../../app/lib/create-agreement";
 
 const CONTRACT_ADDRESS =
   process.env.CASEWEAVE_E2E_CONTRACT_ADDRESS ??
-  "0x2dE423524Cb1f44eD9c62Da0f6917a51D9bb1e4e";
+  "0x357688E5fc8D433eb2De071fE9ceeDf93eBB024f";
 const RECEIVER_ADDRESS =
   process.env.CASEWEAVE_E2E_RECEIVER_ADDRESS ??
-  "0x317FE8eAE21564140787622807A9Cfdc702CDf07";
+  "0xeF7c04C58716e00F090b2C9ec305BDae86E0D4F7";
 const CONSUMER_ADDRESS =
   process.env.CASEWEAVE_E2E_CONSUMER_ADDRESS ??
-  "0x0bABB4777B485f66Aefd1D1FdC021AF0De248EaD";
+  "0x9E4Ecf45C0B356bDc46731A4B862ab3E7Ffa2488";
 const EVIDENCE_COMMIT =
   process.env.CASEWEAVE_E2E_COMMIT_SHA ??
   "afb440fef324d09de6db12f40804ae9dce815c6e";
@@ -39,9 +39,12 @@ const EVIDENCE_URL =
 const COUNTER_EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_COUNTER_EVIDENCE_URL ??
   `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-counter-facts.txt`;
+const SOURCE_FACTS_EVIDENCE_URL =
+  process.env.CASEWEAVE_E2E_SOURCE_FACTS_EVIDENCE_URL ??
+  `https://api.github.com/repos/ometere123/caseweave/commits/${EVIDENCE_COMMIT}`;
 const CHALLENGE_EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_CHALLENGE_EVIDENCE_URL ??
-  `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-delivery.md`;
+  SOURCE_FACTS_EVIDENCE_URL;
 const APP_EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_APP_EVIDENCE_URL ??
   "https://caseweave.vercel.app";
@@ -60,6 +63,26 @@ const EVIDENCE_CHANGED_FILES = [
   "test/frontend/studionet_e2e.test.ts",
   "test/test_caseweave_milestone_direct.py",
 ];
+
+const RPC_METADATA_TIMEOUT_MS = 15_000;
+const FINALITY_TIMEOUT_MS = 180_000;
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 type AccountName = "owner" | "party_a" | "party_b" | "third";
 
@@ -118,7 +141,11 @@ async function getTransactionWithRetry(client: any, hash: string, attempts = 12)
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      return await client.getTransaction({ hash: hash as any });
+      return await withTimeout(
+        client.getTransaction({ hash: hash as any }),
+        RPC_METADATA_TIMEOUT_MS,
+        `getTransaction(${hash})`,
+      );
     } catch (error) {
       lastError = error;
       if (attempt + 1 < attempts) {
@@ -137,12 +164,16 @@ async function waitForFinalizedReceipt(client: any, hash: string, attempts = 4) 
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      return await client.waitForTransactionReceipt({
-        hash: hash as any,
-        status: TransactionStatus.FINALIZED,
-        retries: 180,
-        interval: 3000,
-      });
+      return await withTimeout(
+        client.waitForTransactionReceipt({
+          hash: hash as any,
+          status: TransactionStatus.FINALIZED,
+          retries: 60,
+          interval: 3000,
+        }),
+        FINALITY_TIMEOUT_MS,
+        `waitForTransactionReceipt(${hash})`,
+      );
     } catch (error) {
       lastError = error;
       if (attempt + 1 < attempts) {
@@ -232,9 +263,11 @@ async function readConsumer(
 }
 
 async function triggered(client: any, hash: string): Promise<string[]> {
-  return (await client
-    .getTriggeredTransactionIds({ hash })
-    .catch(() => [])) as string[];
+  return (await withTimeout(
+    client.getTriggeredTransactionIds({ hash }),
+    RPC_METADATA_TIMEOUT_MS,
+    `getTriggeredTransactionIds(${hash})`,
+  ).catch(() => [])) as string[];
 }
 
 async function send(
@@ -248,6 +281,7 @@ async function send(
   value: bigint = 0n,
   expectSuccess = true,
 ) {
+  console.log(`[StudioNet] ${label}`);
   const hash = await client.writeContract({
     account,
     address,
@@ -288,7 +322,14 @@ async function send(
     throw new Error(`${label} unexpectedly succeeded: ${JSON.stringify(item)}`);
   }
 
+  console.log(`[StudioNet] ${label} finalized ${hash} (${executionResult})`);
+
   return { hash, receipt, item, childTransactionIds };
+}
+
+function isRetryableConsensusFailure(error: unknown): boolean {
+  const message = String(error);
+  return message.includes("MAJORITY_DISAGREE") || message.includes("TIMEOUT");
 }
 
 async function waitForTriggered(
@@ -514,7 +555,7 @@ it(
           );
           break;
         } catch (error) {
-          if (!String(error).includes("MAJORITY_DISAGREE") || attempt === 3) throw error;
+          if (!isRetryableConsensusFailure(error) || attempt === 3) throw error;
           await new Promise((resolve) => setTimeout(resolve, 5000));
         }
       }
@@ -535,7 +576,7 @@ it(
         [
           agreementId,
           proofId,
-          "The committed software delivery is complete and the claimant requests release of the funded milestone to the claimant after independent verification. The verified commit-pinned evidence satisfies the obligation.",
+          `The committed CaseWeave software delivery is the exact GitHub repository ometere123/caseweave at immutable commit ${EVIDENCE_COMMIT}. The claimant requests independent verification that this source revision and its changed-file membership match the agreed technical delivery obligation, with release of the funded milestone only if the verified source facts and acceptance criteria support that result.`,
           "release_payment",
         ],
         evidence,
@@ -567,15 +608,27 @@ it(
       expect(disputeAfterResponse.status).toBe("awaiting_precedent_search");
       state.states.disputeAfterResponse = disputeAfterResponse;
 
-      await send(
-        "verify respondent delivery evidence",
-        partyAClient,
-        partyA,
-        CONTRACT_ADDRESS,
-        "verify_evidence_url",
-        [disputeId, "respondent", 0],
-        evidence,
-      );
+      let respondentEvidenceVerification: Awaited<ReturnType<typeof send>> | null = null;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          respondentEvidenceVerification = await send(
+            `verify respondent delivery evidence (attempt ${attempt})`,
+            partyAClient,
+            partyA,
+            CONTRACT_ADDRESS,
+            "verify_evidence_url",
+            [disputeId, "respondent", 0],
+            evidence,
+          );
+          break;
+        } catch (error) {
+          if (!isRetryableConsensusFailure(error) || attempt === 3) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+        }
+      }
+      if (!respondentEvidenceVerification) {
+        throw new Error("respondent evidence verification did not produce a finalized result");
+      }
 
       const responseDeadline = futureUtc(6 * 60 * 60);
       const challengeDeadline = futureUtc(12 * 60 * 60);
@@ -628,16 +681,16 @@ it(
         evidence,
       );
       await send(
-        "add concrete delivery artifact as claimant evidence",
+        "add authoritative GitHub commit metadata as claimant evidence",
         partyBClient,
         partyB,
         CONTRACT_ADDRESS,
         "add_evidence",
-        [disputeId, "claimant", APP_EVIDENCE_URL],
+        [disputeId, "claimant", SOURCE_FACTS_EVIDENCE_URL],
         evidence,
       );
       await send(
-        "verify concrete claimant delivery artifact",
+        "verify authoritative claimant source facts",
         partyBClient,
         partyB,
         CONTRACT_ADDRESS,
@@ -683,8 +736,7 @@ it(
         } catch (error) {
           if (
             attempt === 3 ||
-            !(error instanceof Error) ||
-            !error.message.includes("MAJORITY_DISAGREE")
+            !isRetryableConsensusFailure(error)
           ) {
             throw error;
           }
@@ -693,39 +745,75 @@ it(
       if (!counterEvidenceVerification) {
         throw new Error("counter-evidence verification did not produce a finalized result");
       }
-      await send(
-        "resolve challenged evidence by independent evidence-court consensus",
-        partyAClient,
-        partyA,
-        CONTRACT_ADDRESS,
-        "resolve_evidence_challenge",
-        [challengeId],
-        evidence,
-      );
+      let resolvedChallenge;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          resolvedChallenge = await send(
+            `resolve challenged evidence by independent evidence-court consensus (attempt ${attempt})`,
+            partyAClient,
+            partyA,
+            CONTRACT_ADDRESS,
+            "resolve_evidence_challenge",
+            [challengeId],
+            evidence,
+          );
+          break;
+        } catch (error) {
+          if (
+            attempt === 3 ||
+            !isRetryableConsensusFailure(error)
+          ) {
+            throw error;
+          }
+        }
+      }
+      if (!resolvedChallenge) {
+        throw new Error("evidence challenge resolution did not produce a finalized result");
+      }
       state.states.evidenceAfterChallenge = await readCase(
         partyAClient,
         "list_evidence_for_dispute",
         [disputeId],
       );
 
-      await send(
-        "request bounded precedent search",
-        partyBClient,
-        partyB,
-        CONTRACT_ADDRESS,
-        "request_precedent_search",
-        [disputeId],
-        evidence,
-      );
-      await send(
-        "request substantive AI-consensus verdict",
-        partyBClient,
-        partyB,
-        CONTRACT_ADDRESS,
-        "request_verdict",
-        [disputeId],
-        evidence,
-      );
+      let precedentSearch: Awaited<ReturnType<typeof send>> | null = null;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+          precedentSearch = await send(
+            `request bounded precedent search (attempt ${attempt})`,
+            partyBClient,
+            partyB,
+            CONTRACT_ADDRESS,
+            "request_precedent_search",
+            [disputeId],
+            evidence,
+          );
+          break;
+        } catch (error) {
+          if (!isRetryableConsensusFailure(error) || attempt === 3) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+        }
+      }
+      if (!precedentSearch) throw new Error("precedent search did not produce a finalized result");
+      let verdict: Awaited<ReturnType<typeof send>> | null = null;
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        try {
+          verdict = await send(
+            `request substantive AI-consensus verdict (attempt ${attempt})`,
+            partyBClient,
+            partyB,
+            CONTRACT_ADDRESS,
+            "request_verdict",
+            [disputeId],
+            evidence,
+          );
+          break;
+        } catch (error) {
+          if (!isRetryableConsensusFailure(error) || attempt === 5) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+        }
+      }
+      if (!verdict) throw new Error("verdict did not produce a finalized result");
       const verdictState = await readCase(partyBClient, "get_dispute", [disputeId]);
       expect(verdictState.status).toBe("verdict_reached");
       state.states.afterVerdict = verdictState;
@@ -760,8 +848,8 @@ it(
         "file_appeal",
         [
           disputeId,
-          "precedent_misapplied",
-          "The first-instance holding should be independently reconsidered against the frozen evidence.",
+          "new_evidence",
+          `The appellant submits the commit-pinned delivery record at ${EVIDENCE_URL} as separately versioned appellate evidence. Validators must independently re-fetch it, compare it with the frozen snapshot and affirm the existing outcome if no material contradiction is found.`,
           1,
         ],
         evidence,
@@ -770,6 +858,44 @@ it(
       const appealId =
         extractTransactionReturnString(appeal.receipt) ??
         lastId(await readCase(partyAClient, "list_appeals"), "list_appeals");
+      const appealDisputeBeforeEvidence = await readCase(partyAClient, "get_dispute", [disputeId]);
+      const appealEvidenceIndex = Number(appealDisputeBeforeEvidence.respondent_evidence_count);
+      await send(
+        "add separately versioned appellate source evidence",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "add_appeal_evidence",
+        [appealId, "respondent", EVIDENCE_URL],
+        evidence,
+      );
+      let appealEvidence: any;
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        await send(
+          `verify separately versioned appellate source evidence (attempt ${attempt})`,
+          partyAClient,
+          partyA,
+          CONTRACT_ADDRESS,
+          "verify_evidence_url",
+          [disputeId, "respondent", appealEvidenceIndex],
+          evidence,
+        );
+        appealEvidence = await readCase(partyAClient, "get_evidence_item", [
+          disputeId,
+          "respondent",
+          appealEvidenceIndex,
+        ]);
+        if (appealEvidence.status === "verified") break;
+        if (attempt < 5) {
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+        }
+      }
+      if (appealEvidence?.status !== "verified") {
+        throw new Error(
+          `appellate evidence did not reach verified status: ${JSON.stringify(appealEvidence)}`,
+        );
+      }
+      state.states.appealEvidence = appealEvidence;
       const appealBeforeUnauthorized = {
         appeal: await readCase(thirdClient, "get_appeal", [appealId]),
         dispute: await readCase(thirdClient, "get_dispute", [disputeId]),
@@ -798,15 +924,27 @@ it(
         after: afterUnauthorized,
       };
 
-      const appellate = await send(
-        "request independent appellate validator consensus",
-        ownerClient,
-        owner,
-        CONTRACT_ADDRESS,
-        "request_appeal_review",
-        [appealId],
-        evidence,
-      );
+      let appellate: Awaited<ReturnType<typeof send>> | null = null;
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        try {
+          appellate = await send(
+            `request independent appellate validator consensus (attempt ${attempt})`,
+            ownerClient,
+            owner,
+            CONTRACT_ADDRESS,
+            "request_appeal_review",
+            [appealId],
+            evidence,
+          );
+          break;
+        } catch (error) {
+          if (!isRetryableConsensusFailure(error) || attempt === 5) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 5000));
+        }
+      }
+      if (!appellate) {
+        throw new Error("appellate consensus did not produce a finalized result");
+      }
       const afterAppeal = {
         appeal: await readCase(ownerClient, "get_appeal", [appealId]),
         dispute: await readCase(ownerClient, "get_dispute", [disputeId]),
