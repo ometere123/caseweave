@@ -2,9 +2,22 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { getExplorerTxUrl, readContract, writeContract } from "../../../lib/genlayer";
+import {
+  getExplorerTxUrl,
+  readContract,
+  readReceiverContract,
+  writeContract,
+  writeReceiverContract,
+} from "../../../lib/genlayer";
 import { useWallet } from "../../../store/useWallet";
-import type { Agreement, AgreementSpec, Dispute, Milestone, TransferRecord } from "../../../lib/contract";
+import type {
+  Agreement,
+  AgreementSpec,
+  CustodyRecord,
+  Dispute,
+  Milestone,
+  TransferRecord,
+} from "../../../lib/contract";
 import { buildRegisterDeliveryProofArgs } from "../../../lib/contract";
 import { ALLOWED_REQUESTED_OUTCOMES } from "../../../lib/contract";
 import { ObligationLens } from "../../../components/ObligationLens";
@@ -18,10 +31,12 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
   const [milestones, setMilestones] = useState<Record<string, Milestone>>({});
   const [disputes, setDisputes] = useState<Record<string, Dispute>>({});
   const [transfers, setTransfers] = useState<Record<string, TransferRecord>>({});
+  const [custody, setCustody] = useState<Record<string, CustodyRecord>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [fundAmount, setFundAmount] = useState("100");
+  const [refundAmount, setRefundAmount] = useState("");
   const [lastTransaction, setLastTransaction] = useState<string | null>(null);
   const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(null);
 
@@ -34,11 +49,23 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
         readContract("list_disputes_by_agreement", [agreementId]),
         readContract("list_transfers", [agreementId]),
       ]);
+      const parsedTransfers = transferRows as Record<string, TransferRecord>;
+      const custodyEntries = await Promise.all(
+        Object.keys(parsedTransfers).map(async (transferId) => {
+          try {
+            const record = (await readReceiverContract("get_custody", [transferId])) as CustodyRecord;
+            return [transferId, record] as const;
+          } catch {
+            return null;
+          }
+        }),
+      );
       setAgreement(ag as Agreement);
       setSpec(commitment as AgreementSpec);
       setMilestones(milestoneRows as Record<string, Milestone>);
       setDisputes(disp as Record<string, Dispute>);
-      setTransfers(transferRows as Record<string, TransferRecord>);
+      setTransfers(parsedTransfers);
+      setCustody(Object.fromEntries(custodyEntries.filter((entry): entry is readonly [string, CustodyRecord] => entry !== null)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load agreement");
     }
@@ -100,6 +127,58 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to allocate milestone funds");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRefundAvailable() {
+    if (!address) return connect();
+    const amount = Number(refundAmount);
+    const available = Number(agreement?.escrow?.available ?? 0);
+    if (!Number.isSafeInteger(amount) || amount <= 0 || amount > available) {
+      setError("Refund must be a positive whole number no greater than available escrow.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await writeContract(address, "refund_available", [agreementId, amount]);
+      setLastTransaction(result.hash);
+      setRefundAmount("");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create available-balance refund");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReconcileFailedTransfer(transferId: string) {
+    if (!address) return connect();
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await writeContract(address, "reconcile_failed_transfer", [transferId]);
+      setLastTransaction(result.hash);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reconcile the transfer");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleWithdraw(transferId: string) {
+    if (!address) return connect();
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await writeReceiverContract(address, "withdraw", [transferId]);
+      setLastTransaction(result.hash);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit custody withdrawal");
     } finally {
       setBusy(false);
     }
@@ -262,6 +341,16 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
                 <p className="text-[11px] text-muted">Displayed amounts are not deposited funds until this payable transaction finalizes.</p>
               </div>
             )}
+            {address?.toLowerCase() === agreement.creator.toLowerCase() && Number(agreement.escrow?.available ?? 0) > 0 && (
+              <div className="mt-4 space-y-2 border-t border-line/30 pt-3">
+                <label className="block text-[10px] uppercase tracking-wide text-muted">Refund uncommitted available GEN</label>
+                <div className="flex gap-2">
+                  <input aria-label="Refund amount in GEN" type="number" min={1} max={agreement.escrow?.available ?? 0} step={1} value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} className="input" placeholder="Amount" />
+                  <button onClick={handleRefundAvailable} disabled={busy} className="border border-gold/60 text-gold font-mono text-xs px-3 rounded-sm disabled:opacity-50">{busy ? "Preparing…" : "Refund"}</button>
+                </div>
+                <p className="text-[11px] text-muted">Only uncommitted available balance is refundable; committed or pending liabilities remain locked.</p>
+              </div>
+            )}
           </Panel>
 
           <Panel title="Payment reconciliation">
@@ -289,8 +378,40 @@ export function AgreementChamberClient({ agreementId }: { agreementId: string })
                     {transfer.status === "pending" && (
                       <p className="text-[10px] text-muted mt-1">Awaiting child finality and recipient confirmation.</p>
                     )}
+                    {transfer.status === "failed" && isParty && (
+                      <button onClick={() => handleReconcileFailedTransfer(transfer.transfer_id)} disabled={busy} className="mt-2 border border-dispute/60 text-dispute font-mono text-[10px] px-2 py-1 rounded-sm disabled:opacity-50">Reconcile failed transfer</button>
+                    )}
                   </div>
                 ))}
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Custody and beneficiary withdrawal">
+            {transferEntries.length === 0 ? (
+              <p className="text-xs text-muted italic">Custody appears after a court-to-receiver transfer is finalized.</p>
+            ) : (
+              <div className="space-y-3">
+                {transferEntries.map((transfer) => {
+                  const record = custody[transfer.transfer_id];
+                  if (!record) return null;
+                  const isBeneficiary = address?.toLowerCase() === record.beneficiary.toLowerCase();
+                  return (
+                    <div key={record.transfer_id} className="border border-line/40 rounded-sm p-2">
+                      <div className="flex justify-between gap-2 text-xs font-mono"><span className="text-paper">{record.transfer_id}</span><span className="text-verdict uppercase">{record.status.replace(/_/g, " ")}</span></div>
+                      <p className="text-[11px] text-muted mt-1">{record.amount} GEN · beneficiary <span className="break-all">{record.beneficiary}</span></p>
+                      {record.status === "custodied" && isBeneficiary && (
+                        <button onClick={() => handleWithdraw(record.transfer_id)} disabled={busy} className="mt-2 bg-verdict text-ink font-mono text-[10px] px-2 py-1 rounded-sm disabled:opacity-50">{busy ? "Submitting…" : "Withdraw custody"}</button>
+                      )}
+                      {record.status === "withdrawal_submitted" && (
+                        <p className="text-[10px] text-muted mt-2">EOA withdrawal submitted. This contract status is not an externally verified delivery receipt.</p>
+                      )}
+                      {record.withdrawal_child_transaction_id && (
+                        <a className="text-[10px] text-citation underline break-all block mt-1" href={getExplorerTxUrl(record.withdrawal_child_transaction_id)} target="_blank" rel="noreferrer">inspect recorded child hash</a>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </Panel>

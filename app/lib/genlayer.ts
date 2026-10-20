@@ -6,7 +6,11 @@ import type {
   GenLayerTransaction,
   Hash,
 } from "genlayer-js/types";
-import { CASEWEAVE_CONTRACT_ADDRESS } from "./contract";
+import {
+  CASEWEAVE_CONTRACT_ADDRESS,
+  CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS,
+  CASEWEAVE_SETTLEMENT_RECEIVER_ADDRESS,
+} from "./contract";
 
 const STUDIO_EXPLORER_URL = "https://explorer-studio.genlayer.com";
 
@@ -297,9 +301,17 @@ export async function readContract(
   functionName: string,
   args: CalldataEncodable[] = []
 ) {
+  return readContractAt(CASEWEAVE_CONTRACT_ADDRESS, functionName, args);
+}
+
+export async function readContractAt(
+  address: Address,
+  functionName: string,
+  args: CalldataEncodable[] = [],
+) {
   const client = getReadClient();
   return client.readContract({
-    address: CASEWEAVE_CONTRACT_ADDRESS,
+    address,
     functionName,
     args,
   });
@@ -311,9 +323,25 @@ export async function writeContract(
   args: CalldataEncodable[] = [],
   value: bigint = BigInt(0),
 ) {
+  return writeContractAt(
+    CASEWEAVE_CONTRACT_ADDRESS,
+    account,
+    functionName,
+    args,
+    value,
+  );
+}
+
+export async function writeContractAt(
+  address: Address,
+  account: Address,
+  functionName: string,
+  args: CalldataEncodable[] = [],
+  value: bigint = BigInt(0),
+) {
   const client = getWriteClient(account);
   const hash = await client.writeContract({
-    address: CASEWEAVE_CONTRACT_ADDRESS,
+    address,
     functionName,
     args,
     value,
@@ -323,6 +351,63 @@ export async function writeContract(
   const receipt = mergeReceipts(waitedReceipt, fullReceipt);
   assertExecutionSucceeded(hash, receipt);
   return { hash, receipt };
+}
+
+function configuredAddress(value: string | "", label: string): Address {
+  if (!value) throw new Error(`${label} is not configured for this deployment.`);
+  return value as Address;
+}
+
+export function readReceiverContract(
+  functionName: string,
+  args: CalldataEncodable[] = [],
+) {
+  return readContractAt(
+    configuredAddress(CASEWEAVE_SETTLEMENT_RECEIVER_ADDRESS, "Settlement receiver"),
+    functionName,
+    args,
+  );
+}
+
+export function writeReceiverContract(
+  account: Address,
+  functionName: string,
+  args: CalldataEncodable[] = [],
+  value: bigint = BigInt(0),
+) {
+  return writeContractAt(
+    configuredAddress(CASEWEAVE_SETTLEMENT_RECEIVER_ADDRESS, "Settlement receiver"),
+    account,
+    functionName,
+    args,
+    value,
+  );
+}
+
+export function readJudgmentConsumer(
+  functionName: string,
+  args: CalldataEncodable[] = [],
+) {
+  return readContractAt(
+    configuredAddress(CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS, "Judgment consumer"),
+    functionName,
+    args,
+  );
+}
+
+export function writeJudgmentConsumer(
+  account: Address,
+  functionName: string,
+  args: CalldataEncodable[] = [],
+  value: bigint = BigInt(0),
+) {
+  return writeContractAt(
+    configuredAddress(CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS, "Judgment consumer"),
+    account,
+    functionName,
+    args,
+    value,
+  );
 }
 
 /** Child transactions are created only after a finalized parent message. */

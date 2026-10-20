@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timedelta, timezone
 
 
 EVIDENCE_COMMIT = "ff4df65945c068d0d3690aea8f2b256abcbbd290"
@@ -90,6 +91,27 @@ APPEAL_RESULT = "```json\n" + json.dumps(
 ) + "\n```"
 
 
+def _future_deadline(direct_vm, seconds: int) -> str:
+    current = datetime.fromisoformat(str(direct_vm._datetime).replace("Z", "+00:00"))
+    return (current + timedelta(seconds=seconds)).astimezone(timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
+def _accept_procedure(direct_vm, court, dispute_id, claimant, respondent):
+    response_deadline = _future_deadline(direct_vm, 3600)
+    challenge_deadline = _future_deadline(direct_vm, 7200)
+    direct_vm.sender = claimant
+    court.set_dispute_deadlines(dispute_id, response_deadline, challenge_deadline)
+    direct_vm.sender = respondent
+    court.set_dispute_deadlines(dispute_id, response_deadline, challenge_deadline)
+    appeal_deadline = _future_deadline(direct_vm, 14400)
+    direct_vm.sender = claimant
+    court.set_appeal_window(dispute_id, appeal_deadline)
+    direct_vm.sender = respondent
+    court.set_appeal_window(dispute_id, appeal_deadline)
+
+
 def _state(court, appeal_id: str, dispute_id: str, case_id: str) -> dict:
     return {
         "appeal": court.get_appeal(appeal_id),
@@ -130,8 +152,7 @@ def _create_pending_appeal(court, direct_vm, owner, alice, bob) -> tuple[str, st
     direct_vm.sender = bob
     court.submit_response(dispute_id, "The respondent disputes the claim.", [])
     assert court.get_dispute(dispute_id)["status"] == "awaiting_precedent_search"
-    direct_vm.sender = alice
-    court.set_appeal_window(dispute_id, "2030-01-01T00:00:00Z")
+    _accept_procedure(direct_vm, court, dispute_id, alice, bob)
 
     direct_vm.mock_web(
         r"raw\.githubusercontent\.com/ometere123/caseweave/" + EVIDENCE_COMMIT,

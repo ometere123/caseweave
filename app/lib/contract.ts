@@ -1,5 +1,5 @@
 import type { CalldataEncodable } from "genlayer-js/types";
-import { assertDistinctCounterparty } from "./address";
+import { assertDistinctCounterparty, toCalldataAddress } from "./address";
 
 export const CASEWEAVE_CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS ??
@@ -145,6 +145,37 @@ export function buildFundMilestoneArgs(
   milestoneId: string,
 ): CalldataEncodable[] {
   return [agreementId, milestoneId];
+}
+
+export function buildSetDisputeDeadlinesArgs(
+  disputeId: string,
+  responseDeadline: string,
+  challengeDeadline: string,
+): CalldataEncodable[] {
+  return [disputeId, responseDeadline, challengeDeadline];
+}
+
+export function buildSetAppealWindowArgs(
+  disputeId: string,
+  appealDeadline: string,
+): CalldataEncodable[] {
+  return [disputeId, appealDeadline];
+}
+
+export function buildConsumeJudgmentArgs(input: {
+  courtAddress: string;
+  judgmentId: string;
+  agreementId: string;
+  disputeId: string;
+  version: number;
+}): CalldataEncodable[] {
+  return [
+    toCalldataAddress(input.courtAddress),
+    input.judgmentId,
+    input.agreementId,
+    input.disputeId,
+    input.version,
+  ];
 }
 
 export function buildRegisterDeliveryProofArgs(input: {
@@ -411,4 +442,36 @@ export type Appeal = {
   bond_status?: string;
   supersedes_judgment_id?: string;
   judgment_id?: string;
+};
+
+export type DisputeProcedure = {
+  policy_id: string;
+  policy_version: number;
+  response_deadline: string;
+  challenge_deadline: string;
+  appeal_deadline: string;
+  deadlines_status: "uncommitted" | "proposed" | "accepted" | string;
+  deadlines_proposed_by: string;
+  proposed_response_deadline: string;
+  proposed_challenge_deadline: string;
+  deadlines_accepted_by: string[];
+  appeal_deadline_status: "uncommitted" | "proposed" | "accepted" | string;
+  appeal_deadline_proposed_by: string;
+  proposed_appeal_deadline: string;
+  appeal_deadline_accepted_by: string[];
+  appeal_window_closed: boolean;
+  extension_count: number;
+  silence_is_not_admission: boolean;
+};
+
+export type CustodyRecord = {
+  transfer_id: string;
+  court: string;
+  beneficiary: string;
+  amount: number;
+  proof_commitment: string;
+  status: "custodied" | "withdrawal_submitted" | string;
+  received_at: string;
+  withdrawal_submitted_at: string;
+  withdrawal_child_transaction_id: string;
 };

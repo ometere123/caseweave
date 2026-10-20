@@ -133,6 +133,12 @@ class CaseWeaveSettlementReceiver(gl.Contract):
             raise gl.vm.UserError("custody record is not withdrawable")
         if gl.message.sender_address != record.beneficiary:
             raise gl.vm.UserError("only the beneficiary may withdraw custody funds")
+        # GenVM error callbacks do not carry a reliable child-transfer id. A
+        # single serialized withdrawal is therefore the enforceable binding:
+        # the callback can only reconcile the record named by this lock and a
+        # second beneficiary cannot overwrite it while the child is pending.
+        if self.active_withdrawal_id:
+            raise gl.vm.UserError("another beneficiary withdrawal is pending")
         record.status = "withdrawal_submitted"
         record.withdrawal_submitted_at = gl.message_raw["datetime"]
         self.active_withdrawal_id = transfer_id
@@ -185,6 +191,10 @@ class CaseWeaveSettlementReceiver(gl.Contract):
     @gl.public.view
     def get_trusted_court(self) -> str:
         return self.trusted_court.as_hex
+
+    @gl.public.view
+    def get_active_withdrawal_id(self) -> str:
+        return self.active_withdrawal_id
 
     @gl.public.view
     def get_custody(self, transfer_id: str) -> dict:

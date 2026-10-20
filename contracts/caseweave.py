@@ -16,6 +16,17 @@ MAX_CHALLENGES = 32
 MAX_TAGS = 16
 MAX_SOURCE_RESPONSE_BYTES = 65536
 
+# Procedural deadlines are part of the bilateral CaseWeave procedure policy.
+# They are deliberately bounded so one party cannot create an indefinitely
+# live case or silently move a finalized case's appeal boundary. Values are
+# expressed in UTC seconds and committed only after both parties accept the
+# exact same canonical timestamps.
+PROCEDURE_POLICY_ID = "caseweave-procedure-v1"
+MIN_DEADLINE_DELAY_SECONDS = 60
+MAX_RESPONSE_DEADLINE_SECONDS = 7 * 24 * 60 * 60
+MAX_CHALLENGE_DEADLINE_SECONDS = 14 * 24 * 60 * 60
+MAX_APPEAL_DEADLINE_SECONDS = 30 * 24 * 60 * 60
+
 EVIDENCE_STATUSES = {
     "unverified", "verified", "failed_fetch", "invalid_url", "unstable", "not_relevant",
 }
@@ -508,6 +519,69 @@ class CaseWeaveCourt(gl.Contract):
             raise gl.vm.UserError(f"invalid {field}: too short")
         if len(cleaned) > MAX_STRUCTURED_TEXT_LENGTH:
             raise gl.vm.UserError(f"invalid {field}: too long")
+        return cleaned
+
+    def _is_leap_year(self, year: int) -> bool:
+        return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+    def _utc_timestamp_seconds(self, value: str, field: str) -> int:
+        """Parse the only accepted deadline form: YYYY-MM-DDTHH:MM:SSZ."""
+        cleaned = value.strip()
+        if len(cleaned) != 20:
+            raise gl.vm.UserError(f"{field} must be canonical UTC")
+        if (
+            cleaned[4] != "-"
+            or cleaned[7] != "-"
+            or cleaned[10] != "T"
+            or cleaned[13] != ":"
+            or cleaned[16] != ":"
+            or cleaned[19] != "Z"
+        ):
+            raise gl.vm.UserError(f"{field} must be canonical UTC")
+        digit_positions = (0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 17, 18)
+        for index in digit_positions:
+            if cleaned[index] not in "0123456789":
+                raise gl.vm.UserError(f"{field} must be canonical UTC")
+        year = int(cleaned[0:4])
+        month = int(cleaned[5:7])
+        day = int(cleaned[8:10])
+        hour = int(cleaned[11:13])
+        minute = int(cleaned[14:16])
+        second = int(cleaned[17:19])
+        if year < 1970 or month < 1 or month > 12 or hour > 23 or minute > 59 or second > 59:
+            raise gl.vm.UserError(f"{field} is outside the UTC calendar")
+        month_lengths = [31, 29 if self._is_leap_year(year) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+        if day < 1 or day > month_lengths[month - 1]:
+            raise gl.vm.UserError(f"{field} is outside the UTC calendar")
+
+        # Howard Hinnant's proleptic-Gregorian conversion, with the Unix epoch
+        # offset. Keeping this arithmetic inside the contract avoids relying
+        # on a runner-specific datetime library.
+        adjusted_year = year - (1 if month <= 2 else 0)
+        era = adjusted_year // 400
+        year_of_era = adjusted_year - era * 400
+        month_index = month + (-3 if month > 2 else 9)
+        day_of_year = (153 * month_index + 2) // 5 + day - 1
+        day_of_era = year_of_era * 365 + year_of_era // 4 - year_of_era // 100 + day_of_year
+        days_since_epoch = era * 146097 + day_of_era - 719468
+        return days_since_epoch * 86400 + hour * 3600 + minute * 60 + second
+
+    def _runtime_timestamp_seconds(self) -> int:
+        raw = str(gl.message_raw["datetime"])
+        # GenVM timestamps are canonical in production. Direct Mode runners
+        # may include fractional seconds; deadlines remain second-precision.
+        if len(raw) >= 20 and raw[19] != "Z":
+            raw = raw[:19] + "Z"
+        return self._utc_timestamp_seconds(raw, "runtime timestamp")
+
+    def _validate_deadline(self, value: str, field: str, maximum_seconds: int) -> str:
+        cleaned = self._bounded_text(value, field, 1)
+        timestamp = self._utc_timestamp_seconds(cleaned, field)
+        now = self._runtime_timestamp_seconds()
+        if timestamp < now + MIN_DEADLINE_DELAY_SECONDS:
+            raise gl.vm.UserError(f"{field} is too soon or expired")
+        if timestamp > now + maximum_seconds:
+            raise gl.vm.UserError(f"{field} exceeds the canonical policy maximum")
         return cleaned
 
     def _bounded_array(self, raw: str, field: str, limit: int) -> list:
@@ -1495,9 +1569,20 @@ Include exactly one finding for every expected obligation id.
             verdict_json="",
         )
         self.dispute_procedure_json[dispute_id] = json.dumps({
+            "policy_id": PROCEDURE_POLICY_ID,
+            "policy_version": 1,
             "response_deadline": "",
             "challenge_deadline": "",
             "appeal_deadline": "",
+            "deadlines_status": "uncommitted",
+            "deadlines_proposed_by": "",
+            "proposed_response_deadline": "",
+            "proposed_challenge_deadline": "",
+            "deadlines_accepted_by": [],
+            "appeal_deadline_status": "uncommitted",
+            "appeal_deadline_proposed_by": "",
+            "proposed_appeal_deadline": "",
+            "appeal_deadline_accepted_by": [],
             "appeal_window_closed": False,
             "extension_count": 0,
             "silence_is_not_admission": True,
@@ -1523,20 +1608,38 @@ Include exactly one finding for every expected obligation id.
         if dispute.status not in ("awaiting_response", "awaiting_precedent_search"):
             raise gl.vm.UserError("deadlines can only be set before a verdict")
         current = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
-        if current.get("response_deadline") or current.get("challenge_deadline"):
-            raise gl.vm.UserError("procedure deadlines are already committed")
-        response_deadline = self._bounded_text(response_deadline, "response_deadline", 1)
-        challenge_deadline = self._bounded_text(challenge_deadline, "challenge_deadline", 1)
-        if response_deadline >= challenge_deadline:
+        if current.get("deadlines_status") == "accepted":
+            raise gl.vm.UserError("procedure deadlines are already mutually accepted")
+        response_deadline = self._validate_deadline(
+            response_deadline, "response_deadline", MAX_RESPONSE_DEADLINE_SECONDS
+        )
+        challenge_deadline = self._validate_deadline(
+            challenge_deadline, "challenge_deadline", MAX_CHALLENGE_DEADLINE_SECONDS
+        )
+        if self._utc_timestamp_seconds(response_deadline, "response_deadline") >= self._utc_timestamp_seconds(challenge_deadline, "challenge_deadline"):
             raise gl.vm.UserError("response deadline must precede challenge deadline")
-        self.dispute_procedure_json[dispute_id] = json.dumps({
-            "response_deadline": response_deadline,
-            "challenge_deadline": challenge_deadline,
-            "appeal_deadline": str(current.get("appeal_deadline", "")),
-            "appeal_window_closed": bool(current.get("appeal_window_closed", False)),
-            "extension_count": 0,
-            "silence_is_not_admission": True,
-        }, sort_keys=True)
+        sender_key = gl.message.sender_address.as_hex.lower()
+        proposal_by = str(current.get("deadlines_proposed_by", ""))
+        if not proposal_by:
+            current["policy_id"] = PROCEDURE_POLICY_ID
+            current["policy_version"] = 1
+            current["deadlines_status"] = "proposed"
+            current["deadlines_proposed_by"] = sender_key
+            current["proposed_response_deadline"] = response_deadline
+            current["proposed_challenge_deadline"] = challenge_deadline
+        else:
+            if proposal_by == sender_key:
+                raise gl.vm.UserError("the other dispute party must accept the proposed deadlines")
+            if (
+                response_deadline != str(current.get("proposed_response_deadline", ""))
+                or challenge_deadline != str(current.get("proposed_challenge_deadline", ""))
+            ):
+                raise gl.vm.UserError("deadline acceptance must match the original proposal")
+            current["response_deadline"] = response_deadline
+            current["challenge_deadline"] = challenge_deadline
+            current["deadlines_status"] = "accepted"
+            current["deadlines_accepted_by"] = [proposal_by, sender_key]
+        self.dispute_procedure_json[dispute_id] = json.dumps(current, sort_keys=True)
 
     @gl.public.write
     def set_appeal_window(self, dispute_id: str, appeal_deadline: str) -> None:
@@ -1548,13 +1651,31 @@ Include exactly one finding for every expected obligation id.
         if dispute.status not in ("awaiting_response", "awaiting_precedent_search", "awaiting_verdict"):
             raise gl.vm.UserError("appeal window must be committed before a verdict")
         procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
-        if procedure.get("appeal_deadline"):
-            raise gl.vm.UserError("appeal window is already committed")
-        appeal_deadline = self._bounded_text(appeal_deadline, "appeal_deadline", 20)
-        if appeal_deadline <= gl.message_raw["datetime"]:
-            raise gl.vm.UserError("appeal deadline must be in the future")
-        procedure["appeal_deadline"] = appeal_deadline
-        procedure["appeal_window_closed"] = False
+        if procedure.get("deadlines_status") != "accepted":
+            raise gl.vm.UserError("the dispute procedure must be mutually accepted first")
+        if procedure.get("appeal_deadline_status") == "accepted":
+            raise gl.vm.UserError("appeal window is already mutually accepted")
+        appeal_deadline = self._validate_deadline(
+            appeal_deadline, "appeal_deadline", MAX_APPEAL_DEADLINE_SECONDS
+        )
+        challenge_deadline = str(procedure.get("challenge_deadline", ""))
+        if challenge_deadline and self._utc_timestamp_seconds(appeal_deadline, "appeal_deadline") <= self._utc_timestamp_seconds(challenge_deadline, "challenge_deadline"):
+            raise gl.vm.UserError("appeal deadline must follow the challenge deadline")
+        sender_key = gl.message.sender_address.as_hex.lower()
+        proposal_by = str(procedure.get("appeal_deadline_proposed_by", ""))
+        if not proposal_by:
+            procedure["appeal_deadline_status"] = "proposed"
+            procedure["appeal_deadline_proposed_by"] = sender_key
+            procedure["proposed_appeal_deadline"] = appeal_deadline
+        else:
+            if proposal_by == sender_key:
+                raise gl.vm.UserError("the other dispute party must accept the proposed appeal window")
+            if appeal_deadline != str(procedure.get("proposed_appeal_deadline", "")):
+                raise gl.vm.UserError("appeal-window acceptance must match the original proposal")
+            procedure["appeal_deadline"] = appeal_deadline
+            procedure["appeal_deadline_status"] = "accepted"
+            procedure["appeal_deadline_accepted_by"] = [proposal_by, sender_key]
+            procedure["appeal_window_closed"] = False
         self.dispute_procedure_json[dispute_id] = json.dumps(procedure, sort_keys=True)
 
     @gl.public.write
@@ -1567,8 +1688,10 @@ Include exactly one finding for every expected obligation id.
         if gl.message.sender_address not in (dispute.claimant, dispute.respondent):
             raise gl.vm.UserError("only a dispute party may advance procedure")
         procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
+        if procedure.get("deadlines_status") != "accepted":
+            raise gl.vm.UserError("response deadline policy is not mutually accepted")
         deadline = str(procedure.get("response_deadline", ""))
-        if not deadline or gl.message_raw["datetime"] <= deadline:
+        if not deadline or self._runtime_timestamp_seconds() <= self._utc_timestamp_seconds(deadline, "response_deadline"):
             raise gl.vm.UserError("response deadline has not elapsed")
         # Silence advances the procedure but is explicitly not an admission.
         dispute.response_summary = "No response was received by the committed deadline; silence is not an admission."
@@ -2494,8 +2617,8 @@ The requested outcome is an input label, not a verdict category.
             raise gl.vm.UserError("missing verdict data")
 
         procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
-        if not procedure.get("appeal_deadline"):
-            raise gl.vm.UserError("an explicit appeal window is required before finalization")
+        if procedure.get("appeal_deadline_status") != "accepted" or not procedure.get("appeal_deadline"):
+            raise gl.vm.UserError("a mutually accepted appeal window is required before finalization")
         for challenge in self.evidence_challenges.values():
             if challenge.dispute_id == dispute_id and challenge.status == "pending":
                 raise gl.vm.UserError("all pending evidence challenges must be resolved before finalization")
@@ -2681,8 +2804,10 @@ The requested outcome is an input label, not a verdict category.
         if dispute.status != "finalized":
             raise gl.vm.UserError("only finalized disputes have an appeal window")
         procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
+        if procedure.get("appeal_deadline_status") != "accepted":
+            raise gl.vm.UserError("appeal window is not mutually accepted")
         deadline = str(procedure.get("appeal_deadline", ""))
-        if not deadline or gl.message_raw["datetime"] <= deadline:
+        if not deadline or self._runtime_timestamp_seconds() <= self._utc_timestamp_seconds(deadline, "appeal_deadline"):
             raise gl.vm.UserError("appeal window has not elapsed")
         if procedure.get("appeal_window_closed"):
             raise gl.vm.UserError("appeal window is already closed")
@@ -2762,9 +2887,9 @@ The requested outcome is an input label, not a verdict category.
         procedure = json.loads(self.dispute_procedure_json.get(dispute_id, "{}"))
         if procedure.get("appeal_window_closed"):
             raise gl.vm.UserError("appeal window is closed")
-        if not procedure.get("appeal_deadline"):
-            raise gl.vm.UserError("appeal window is not committed")
-        if gl.message_raw["datetime"] > str(procedure["appeal_deadline"]):
+        if procedure.get("appeal_deadline_status") != "accepted" or not procedure.get("appeal_deadline"):
+            raise gl.vm.UserError("appeal window is not mutually accepted")
+        if self._runtime_timestamp_seconds() > self._utc_timestamp_seconds(str(procedure["appeal_deadline"]), "appeal_deadline"):
             raise gl.vm.UserError("appeal deadline has elapsed")
         current_judgment = self.judgments[judgment_id]
         if current_judgment.appeal_status != "not_appealed" or current_judgment.superseded_by:

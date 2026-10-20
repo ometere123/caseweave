@@ -74,6 +74,12 @@ function lastId(map: unknown, label: string): string {
   return ids[ids.length - 1];
 }
 
+function futureUtc(seconds: number): string {
+  return new Date(Date.now() + seconds * 1000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
+}
+
 function leaderReceipt(receipt: any) {
   return (
     receipt.consensus_data?.leader_receipt?.find(
@@ -542,13 +548,44 @@ it(
         evidence,
       );
 
+      const responseDeadline = futureUtc(6 * 60 * 60);
+      const challengeDeadline = futureUtc(12 * 60 * 60);
       await send(
-        "commit the immutable appeal window before verdict finalization",
+        "propose bilateral response and challenge deadlines",
+        partyBClient,
+        partyB,
+        CONTRACT_ADDRESS,
+        "set_dispute_deadlines",
+        [disputeId, responseDeadline, challengeDeadline],
+        evidence,
+      );
+      await send(
+        "accept bilateral response and challenge deadlines",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "set_dispute_deadlines",
+        [disputeId, responseDeadline, challengeDeadline],
+        evidence,
+      );
+
+      const appealDeadline = futureUtc(24 * 60 * 60);
+      await send(
+        "propose the immutable appeal window before verdict finalization",
         partyBClient,
         partyB,
         CONTRACT_ADDRESS,
         "set_appeal_window",
-        [disputeId, "2099-12-31T23:59:59Z"],
+        [disputeId, appealDeadline],
+        evidence,
+      );
+      await send(
+        "accept the immutable appeal window",
+        partyAClient,
+        partyA,
+        CONTRACT_ADDRESS,
+        "set_appeal_window",
+        [disputeId, appealDeadline],
         evidence,
       );
 

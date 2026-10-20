@@ -6,6 +6,9 @@ import {
   buildCreateAgreementArgs,
   buildCreateTechnicalAgreementArgs,
   buildFundAgreementArgs,
+  buildSetDisputeDeadlinesArgs,
+  buildSetAppealWindowArgs,
+  buildConsumeJudgmentArgs,
 } from "../../app/lib/contract";
 import {
   assertExecutionSucceeded,
@@ -128,6 +131,30 @@ describe("GenLayer address calldata", () => {
 
   it("builds payable funding arguments without changing the typed address path", () => {
     expect(buildFundAgreementArgs("AGR_1", 1000)).toEqual(["AGR_1", 1000]);
+  });
+
+  it("builds canonical procedural deadline calls without altering timestamps", () => {
+    expect(buildSetDisputeDeadlinesArgs("DIS_1", "2030-01-01T01:00:00Z", "2030-01-01T02:00:00Z")).toEqual([
+      "DIS_1",
+      "2030-01-01T01:00:00Z",
+      "2030-01-01T02:00:00Z",
+    ]);
+    expect(buildSetAppealWindowArgs("DIS_1", "2030-01-01T04:00:00Z")).toEqual([
+      "DIS_1",
+      "2030-01-01T04:00:00Z",
+    ]);
+  });
+
+  it("uses a typed court address when consuming a judgment cross-contract", () => {
+    const args = buildConsumeJudgmentArgs({
+      courtAddress: "0x2222222222222222222222222222222222222222",
+      judgmentId: "JDG_2",
+      agreementId: "AGR_1",
+      disputeId: "DIS_1",
+      version: 2,
+    });
+    expect(args[0]).toBeInstanceOf(CalldataAddress);
+    expect(Array.from((args[0] as CalldataAddress).bytes)).toEqual(new Array(20).fill(0x22));
   });
 });
 
