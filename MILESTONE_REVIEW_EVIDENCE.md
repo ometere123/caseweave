@@ -72,8 +72,8 @@ the complete hash table is in [DEPLOYMENT.md](DEPLOYMENT.md).
   court-scoped judgment namespace.
 
 Production URL: <https://caseweave.vercel.app>. The READY deployment
-[AAzEBwuciVWY7kuPsyPiEFi4vbvU](https://vercel.com/delealufejoel-4184s-projects/caseweave/AAzEBwuciVWY7kuPsyPiEFi4vbvU)
-is built from `81abe1efee331ffb1d8824f7fcdf843782deef29`. The production alias
+[GfeDzp9qqSxcHSe4exaytxDAM66G](https://vercel.com/delealufejoel-4184s-projects/caseweave/GfeDzp9qqSxcHSe4exaytxDAM66G)
+is built from `c6bd1e9f59884a140f1a58ba05302290d457c491`. The production alias
 returned HTTP 200 for `/agreements/new`; its client bundle contains the new
 court address and compiled 20-byte `CalldataAddress` conversion, with no
 superseded court address.

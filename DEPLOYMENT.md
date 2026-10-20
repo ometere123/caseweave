@@ -134,8 +134,8 @@ never marks court accounting as paid.
 
 The Vercel production variables were updated to the three addresses above and
 chain `61999`. The final production deployment is READY from Git commit
-`81abe1efee331ffb1d8824f7fcdf843782deef29`:
-[Vercel deployment](https://vercel.com/delealufejoel-4184s-projects/caseweave/AAzEBwuciVWY7kuPsyPiEFi4vbvU).
+`c6bd1e9f59884a140f1a58ba05302290d457c491`:
+[Vercel deployment](https://vercel.com/delealufejoel-4184s-projects/caseweave/GfeDzp9qqSxcHSe4exaytxDAM66G).
 The alias is <https://caseweave.vercel.app>. Production verification returned
 HTTP 200 for `/agreements/new`, found the new court address and the compiled
 20-byte `CalldataAddress` conversion in the client bundle, and found no

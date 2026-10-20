@@ -112,8 +112,8 @@ final judgment from the second contract; reconciled trusted custody; and
 rejected unauthorized appeal mutation, fabricated child hashes, and duplicate
 settlement. Production target is <https://caseweave.vercel.app>. Its READY
 deployment
-[AAzEBwuciVWY7kuPsyPiEFi4vbvU](https://vercel.com/delealufejoel-4184s-projects/caseweave/AAzEBwuciVWY7kuPsyPiEFi4vbvU)
-is built from `81abe1efee331ffb1d8824f7fcdf843782deef29`; the live alias passed
+[GfeDzp9qqSxcHSe4exaytxDAM66G](https://vercel.com/delealufejoel-4184s-projects/caseweave/GfeDzp9qqSxcHSe4exaytxDAM66G)
+is built from `c6bd1e9f59884a140f1a58ba05302290d457c491`; the live alias passed
 the two critical Playwright workflows and bundle verification.
 
 ## Reviewer resubmission response
