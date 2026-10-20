@@ -79,6 +79,7 @@ addresses cannot impersonate the court.
 
 - Network: `studionet`, chain `61999`
 - Court: `0x3BA8098653902c5A5daf08f26A3759fB06C57a2A`
+- Deployed court source commit: `551a2674403ff0c548e684d2320f46966c6e1b19`
 - Receiver: `0x0F77E10770e5a12C0d2f9Bcc5fB077F44eA4257f`
 - Consumer: `0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211`
 - Owner: `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7`

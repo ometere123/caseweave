@@ -29,6 +29,7 @@ keystore, or credential is part of the repository.
 | `CaseWeaveJudgmentConsumer` | `0x08f0eeAFDd4Cf9ba9CD369AB2fCb25451db83211` | `402BE27C006D12CF61C3F452EBF41887568EDFF8021E7596D76FF295BACB68C8` |
 
 Deployer and court owner: `0x0d5540e0aD4B92Aa0ad4e5F1b8cD645ee1E363E7`.
+Deployed court source commit: `551a2674403ff0c548e684d2320f46966c6e1b19`.
 `get_owner()` and the receiver/consumer trust bindings were read after
 deployment and match this deployment identity. The deployed court source is
 the exact `contracts/caseweave.py` byte content represented by the final
