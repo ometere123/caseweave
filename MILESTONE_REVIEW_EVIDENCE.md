@@ -56,3 +56,13 @@ Deployment receipts are listed in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 Machine-readable live evidence:
 [`test-evidence/studionet-final-release-hardening-e2e-final-20261020.json`](test-evidence/studionet-final-release-hardening-e2e-final-20261020.json).
+
+## Production verification
+
+The tested source commit `0fcd95e905696be8c75eca3708b152c9566119a0` was
+deployed to the existing `caseweave` Vercel project and is READY at
+https://caseweave.vercel.app. The creation route returned HTTP 200 and its
+live bundle contained the active Court address plus the typed-address guard and
+byte conversion path. CI passed at
+https://github.com/ometere123/caseweave/actions/runs/39475875319. Convert
+Chrome supervised wallet testing was intentionally not run.

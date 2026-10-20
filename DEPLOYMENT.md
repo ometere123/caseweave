@@ -111,5 +111,17 @@ after the failed appeal consensus.
 ## Production configuration
 
 Vercel production variables were updated to the active addresses and chain
-`61999`. The final frontend deployment URL and CI run are recorded in
-`FINAL_RELEASE_REVIEW.md`. Historical addresses are not active configuration.
+`61999`. The tested source commit was
+`0fcd95e905696be8c75eca3708b152c9566119a0`. The production deployment is
+READY and aliased to the public application:
+
+- Deployment: `dpl_7BFnjrpVkXuN6gDzsVDfrCwRVRyw`
+- Inspect: https://vercel.com/delealufejoel-4184s-projects/caseweave/7BFnjrpVkXuN6gDzsVDfrCwRVRyw
+- Production: https://caseweave.vercel.app
+- Deployment URL: https://caseweave-mm0al2rky-delealufejoel-4184s-projects.vercel.app
+- HTTP check: `GET /agreements/new` returned `200`.
+- Live bundle check: active Court address and typed-address validation/conversion
+  markers were present; the superseded Court address was absent.
+- CI: https://github.com/ometere123/caseweave/actions/runs/39475875319
+
+Historical addresses are provenance only and are not active configuration.

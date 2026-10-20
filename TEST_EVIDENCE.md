@@ -36,9 +36,13 @@ unauthorized appeal mutation, trusted judgment identity, typed address calldata,
 execution-error handling, authoritative agreement IDs, and preserved lifecycle
 transitions. Negative tests assert protected state remains unchanged.
 
-The first production smoke invocation was intentionally not counted: it ran
-before the final Vercel deployment and correctly exposed stale production
-configuration. The production smoke gate is re-run only after the final deploy.
+The pre-deployment production smoke invocation is intentionally not counted: it
+correctly exposed stale production configuration. After the final deployment,
+`GET https://caseweave.vercel.app/agreements/new` returned HTTP `200`; the
+live JavaScript bundle contained the active Court address and the real
+20-byte-address validation/`Uint8Array` conversion path, and did not contain
+the superseded Court address. The Vercel deployment and CI URLs are recorded
+in `DEPLOYMENT.md` and `FINAL_RELEASE_REVIEW.md`.
 
 ## Fresh StudioNet evidence
 

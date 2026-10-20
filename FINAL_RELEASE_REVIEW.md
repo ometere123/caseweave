@@ -2,15 +2,18 @@
 
 ## Current status
 
-Implementation and deterministic automated gates are complete for the focused
-release hardening. The source is ready to freeze after the final production
-deployment and push, but supervised Convert testing is intentionally not run.
+Implementation, deterministic automated gates, source push, and production
+deployment are complete for the focused release hardening. The tested source
+is now frozen; supervised Convert testing is intentionally not run.
 
 ## Release identity
 
 - Baseline: `21063992ffedda2495874ef98b658ddf10f01a4c`
-- Final Git commit: record with `git rev-parse HEAD` after the release commit
-- Git status: must be clean at freeze
+- Tested/deployed source commit: `0fcd95e905696be8c75eca3708b152c9566119a0`
+- Final evidence commit: this release-documentation commit; its exact SHA is
+  reported in the final handoff.
+- Git status: clean after the evidence commit, apart from preserved local
+  historical evidence artifacts that are intentionally not release inputs
 - Network: StudioNet, chain `61999`
 - Court: `0x357688E5fc8D433eb2De071fE9ceeDf93eBB024f`
 - Receiver: `0xeF7c04C58716e00F090b2C9ec305BDae86E0D4F7`
@@ -41,9 +44,20 @@ failed closed and no additional blind retry is authorized.
 ## Production
 
 Vercel production variables are set to the active contract addresses and chain
-`61999`. The final production deployment URL, HTTP check, bundle address check,
-and CI URL must be appended here after the exact final commit is pushed. The
-Convert Chrome profile remains untouched.
+`61999`. The tested source commit was deployed successfully:
+
+- Deployment: `dpl_7BFnjrpVkXuN6gDzsVDfrCwRVRyw`
+- Inspect: https://vercel.com/delealufejoel-4184s-projects/caseweave/7BFnjrpVkXuN6gDzsVDfrCwRVRyw
+- Ready deployment: https://caseweave-mm0al2rky-delealufejoel-4184s-projects.vercel.app
+- Production alias: https://caseweave.vercel.app
+- HTTP verification: `/agreements/new` returned `200`.
+- Bundle verification: the live bundle contains the active Court address,
+  the `Enter a valid 20-byte wallet address.` guard, `Uint8Array` conversion,
+  and the active Receiver/Consumer addresses; it contains neither the
+  superseded Court address nor an untyped string-only address path.
+- CI: https://github.com/ometere123/caseweave/actions/runs/39475875319
+
+The Convert Chrome profile remains untouched.
 
 ## Reviewer assessment
 
