@@ -32,7 +32,7 @@ const CONSUMER_ADDRESS =
   "0x0bABB4777B485f66Aefd1D1FdC021AF0De248EaD";
 const EVIDENCE_COMMIT =
   process.env.CASEWEAVE_E2E_COMMIT_SHA ??
-  "8b2c81d3a085816315a4275b20992a19fda83648";
+  "afb440fef324d09de6db12f40804ae9dce815c6e";
 const EVIDENCE_URL =
   process.env.CASEWEAVE_E2E_EVIDENCE_URL ??
   `https://raw.githubusercontent.com/ometere123/caseweave/${EVIDENCE_COMMIT}/docs/evidence/caseweave-delivery.md`;
@@ -47,15 +47,17 @@ const APP_EVIDENCE_URL =
   "https://caseweave.vercel.app";
 
 const EVIDENCE_CHANGED_FILES = [
+  ".env.example",
+  "README.md",
+  "THREAT_MODEL.md",
+  "app/README.md",
   "app/app/agreements/[id]/AgreementChamberClient.tsx",
   "app/app/disputes/[id]/DisputeCourtroomClient.tsx",
   "app/lib/contract.ts",
-  "app/lib/genlayer.ts",
   "contracts/caseweave.py",
   "contracts/caseweave_settlement_receiver.py",
-  "test/frontend/caseweave.test.ts",
+  "test-evidence/studionet-final-release-hardening-deploy-20261020.json",
   "test/frontend/studionet_e2e.test.ts",
-  "test/test_caseweave_direct.py",
   "test/test_caseweave_milestone_direct.py",
 ];
 
