@@ -71,6 +71,9 @@ the complete hash table is in [DEPLOYMENT.md](DEPLOYMENT.md).
 - The judgment consumer is bound to the trusted court identity and
   court-scoped judgment namespace.
 
-Production URL: <https://caseweave.vercel.app>. The final source push must be
-verified on the production alias for HTTP 200, the new address in the client
-bundle, and the compiled runtime calldata conversion.
+Production URL: <https://caseweave.vercel.app>. The READY deployment
+[AAzEBwuciVWY7kuPsyPiEFi4vbvU](https://vercel.com/delealufejoel-4184s-projects/caseweave/AAzEBwuciVWY7kuPsyPiEFi4vbvU)
+is built from `81abe1efee331ffb1d8824f7fcdf843782deef29`. The production alias
+returned HTTP 200 for `/agreements/new`; its client bundle contains the new
+court address and compiled 20-byte `CalldataAddress` conversion, with no
+superseded court address.
