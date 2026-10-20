@@ -133,7 +133,8 @@ never marks court accounting as paid.
 ## Production
 
 The Vercel production variables were updated to the three addresses above and
-chain `61999`. The final production deployment is READY from Git commit
+chain `61999`. A READY production deployment of this remediation code was
+verified from Git commit
 `c6bd1e9f59884a140f1a58ba05302290d457c491`:
 [Vercel deployment](https://vercel.com/delealufejoel-4184s-projects/caseweave/GfeDzp9qqSxcHSe4exaytxDAM66G).
 The alias is <https://caseweave.vercel.app>. Production verification returned

@@ -110,8 +110,8 @@ The live run created `AGR_1`, `PROOF_1`, `DIS_1`, `CASE_1`, `APP_1`, and
 AI-consensus verdict; performed independent appellate consensus; consumed the
 final judgment from the second contract; reconciled trusted custody; and
 rejected unauthorized appeal mutation, fabricated child hashes, and duplicate
-settlement. Production target is <https://caseweave.vercel.app>. Its READY
-deployment
+settlement. Production target is <https://caseweave.vercel.app>. A READY
+deployment of the remediation code
 [GfeDzp9qqSxcHSe4exaytxDAM66G](https://vercel.com/delealufejoel-4184s-projects/caseweave/GfeDzp9qqSxcHSe4exaytxDAM66G)
 is built from `c6bd1e9f59884a140f1a58ba05302290d457c491`; the live alias passed
 the two critical Playwright workflows and bundle verification.
