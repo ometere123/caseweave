@@ -51,17 +51,9 @@ const APP_EVIDENCE_URL =
 
 const EVIDENCE_CHANGED_FILES = [
   ".env.example",
-  "README.md",
-  "THREAT_MODEL.md",
   "app/README.md",
-  "app/app/agreements/[id]/AgreementChamberClient.tsx",
-  "app/app/disputes/[id]/DisputeCourtroomClient.tsx",
   "app/lib/contract.ts",
-  "contracts/caseweave.py",
-  "contracts/caseweave_settlement_receiver.py",
-  "test-evidence/studionet-final-release-hardening-deploy-20261020.json",
   "test/frontend/studionet_e2e.test.ts",
-  "test/test_caseweave_milestone_direct.py",
 ];
 
 const RPC_METADATA_TIMEOUT_MS = 15_000;
