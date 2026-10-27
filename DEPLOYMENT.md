@@ -157,6 +157,8 @@ existing `caseweave` project after those variables were corrected:
 - `GET /agreements/new`: HTTP `200`
 - Live bundle contained the active Court, Receiver, and Consumer addresses and
   did not contain the superseded deployment addresses.
+- GitHub Actions source gates for the pushed release source: [run 40442239265](https://github.com/ometere123/caseweave/actions/runs/40442239265),
+  conclusion `success`, head `8e26bcc1dd3d8ece4f99681f8bb859e50b920cb7`.
 
 ## Historical deployments
 
