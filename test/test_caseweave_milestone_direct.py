@@ -696,6 +696,30 @@ def test_delivery_source_commitment_and_validator_identity_fail_closed(
     assert direct_vm.run_validator(leader_result=malicious, index=-1) is False
 
 
+def test_technical_agreement_rejects_duplicate_canonical_obligation_ids(
+    direct_vm,
+    direct_deploy,
+    direct_owner,
+    direct_alice,
+):
+    direct_vm.sender = direct_owner
+    court = direct_deploy("contracts/caseweave.py", sdk_version="v0.2.16")
+    from genlayer.py.types import Address
+
+    owner = Address(bytes(direct_owner))
+    alice = Address(bytes(direct_alice))
+    args = list(_technical_args(alice))
+    args[8] = json.dumps(
+        [
+            {"id": "delivery", "text": "The first committed obligation."},
+            {"id": "delivery", "text": "A duplicate obligation identifier."},
+        ]
+    )
+    direct_vm.sender = owner
+    with direct_vm.expect_revert("obligation IDs must be unique"):
+        court.create_technical_agreement(*args)
+
+
 def test_partial_release_is_bounded_to_the_consensus_remedy(
     direct_vm,
     direct_deploy,
@@ -883,7 +907,13 @@ def test_appellate_replacement_judgment_controls_recipient_and_amount(
                 "amount_bps": 10000,
             },
             "reasoning": "The appellate review changes the authoritative remedy.",
-            "findings": [],
+            "findings": [
+                {
+                    "obligation_id": "delivery",
+                    "finding": "satisfied",
+                    "source": "The committed delivery evidence supports the appellate finding.",
+                }
+            ],
         }
     ) + "\n```"
     direct_vm.mock_llm(r"independent appellate validator", appellate)
@@ -933,7 +963,13 @@ def test_remanded_appeal_keeps_settlement_locked(
             "remedy_outcome": "claimant_wins",
             "remedy": {"action": "none", "recipient_role": "none", "amount_bps": 0},
             "reasoning": "The appellate record is incomplete and needs a remand.",
-            "findings": [],
+            "findings": [
+                {
+                    "obligation_id": "delivery",
+                    "finding": "inconclusive",
+                    "source": "The appellate record requires additional evidence.",
+                }
+            ],
         }
     ) + "\n```"
     direct_vm.mock_llm(r"independent appellate validator", remand)
@@ -944,6 +980,107 @@ def test_remanded_appeal_keeps_settlement_locked(
     with direct_vm.expect_revert("settlement is locked until the dispute is finalized"):
         court.settle_judgment(dispute_id)
     assert court.get_escrow(agreement_id) == before
+
+
+def test_appellate_equivalence_uses_committed_ids_and_material_fields(
+    direct_vm,
+    direct_deploy,
+    direct_owner,
+    direct_alice,
+):
+    """Narrative drift is tolerated; material appellate drift is rejected."""
+    court, _, _, dispute_id, case_id = _prepare_finalized_case(
+        direct_vm, direct_deploy, direct_owner, direct_alice, VERDICT
+    )
+    judgment = court.get_current_judgment(dispute_id)
+    direct_vm.sender = direct_alice
+    direct_vm.deal(court.address, 1001)
+    direct_vm.value = 1
+    appeal_id = court.file_appeal(
+        dispute_id,
+        "new_evidence",
+        "Compare the separately authenticated evidence with the frozen snapshot.",
+        1,
+    )
+    direct_vm.value = 0
+
+    base = {
+        "appeal_id": appeal_id,
+        "dispute_id": dispute_id,
+        "case_id": case_id,
+        "snapshot_id": judgment["evidence_snapshot_id"],
+        "result": "affirmed",
+        "affected_case_id": case_id,
+        "remedy_outcome": "claimant_wins",
+        "remedy": {
+            "action": "release",
+            "recipient_role": "claimant",
+            "amount_bps": 10000,
+        },
+        "reasoning": "The frozen record and the separately versioned evidence agree.",
+        "findings": [
+            {
+                "obligation_id": "delivery",
+                "finding": "satisfied",
+                "source": "The authenticated source facts support the obligation.",
+            }
+        ],
+    }
+    direct_vm.mock_llm(
+        r"independent appellate validator",
+        "```json\n" + json.dumps(base) + "\n```",
+    )
+    direct_vm.sender = direct_owner
+    court.request_appeal_review(appeal_id)
+
+    # Same material decision with different reasoning and evidence-source prose
+    # remains equivalent.  The validator closure is the one captured by the
+    # actual request_appeal_review execution above.
+    narrative_variant = dict(base)
+    narrative_variant["reasoning"] = "A different validator explanation reaches the same holding."
+    narrative_variant["affected_case_id"] = ""
+    narrative_variant["findings"] = [
+        {
+            "obligation_id": "delivery",
+            "finding": "satisfied",
+            "source": "Independent retrieval supports the committed delivery criterion.",
+        }
+    ]
+    assert direct_vm.run_validator(
+        leader_result=json.dumps(narrative_variant), index=-1
+    ) is True
+
+    # Natural-language labels are no longer a consensus identifier.
+    missing_canonical_id = dict(base)
+    missing_canonical_id["findings"] = [
+        {
+            "obligation_id": "Deliver the agreed repository artifact",
+            "finding": "satisfied",
+            "source": "unsupported alias",
+        }
+    ]
+    assert direct_vm.run_validator(
+        leader_result=json.dumps(missing_canonical_id), index=-1
+    ) is False
+
+    # Missing, duplicate, or materially conflicting findings are fail-closed.
+    missing_finding = dict(base)
+    missing_finding["findings"] = []
+    assert direct_vm.run_validator(
+        leader_result=json.dumps(missing_finding), index=-1
+    ) is False
+
+    material_variant = dict(base)
+    material_variant["result"] = "modified"
+    material_variant["remedy_outcome"] = "respondent_wins"
+    material_variant["remedy"] = {
+        "action": "release",
+        "recipient_role": "respondent",
+        "amount_bps": 10000,
+    }
+    assert direct_vm.run_validator(
+        leader_result=json.dumps(material_variant), index=-1
+    ) is False
 
 
 def test_receiver_reconciles_eoa_child_locks_without_stranding_other_custody(

@@ -925,7 +925,9 @@ it(
       };
 
       let appellate: Awaited<ReturnType<typeof send>> | null = null;
-      for (let attempt = 1; attempt <= 5; attempt += 1) {
+      // One bounded appellate transaction is intentional: a failed consensus
+      // result must be diagnosed, not hidden behind repeated identical writes.
+      for (let attempt = 1; attempt <= 1; attempt += 1) {
         try {
           appellate = await send(
             `request independent appellate validator consensus (attempt ${attempt})`,
@@ -938,8 +940,7 @@ it(
           );
           break;
         } catch (error) {
-          if (!isRetryableConsensusFailure(error) || attempt === 5) throw error;
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          throw error;
         }
       }
       if (!appellate) {

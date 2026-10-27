@@ -15,6 +15,8 @@ MAX_CANDIDATE_PRECEDENTS = 16
 MAX_CHALLENGES = 32
 MAX_TAGS = 16
 MAX_SOURCE_RESPONSE_BYTES = 65536
+MAX_APPEAL_REASONING_LENGTH = 700
+MAX_APPEAL_SOURCE_LENGTH = 500
 
 # Procedural deadlines are part of the bilateral CaseWeave procedure policy.
 # They are deliberately bounded so one party cannot create an indefinitely
@@ -75,6 +77,17 @@ ALLOWED_APPEAL_RESULTS = {
     "affirmed", "modified", "reversed", "weakened_precedent",
     "overturned_precedent", "remanded_for_more_evidence",
 }
+
+# These are the only appellate dimensions that can authorize a replacement
+# judgment.  Narrative reasoning and source prose are retained for the record,
+# but are deliberately outside the equivalence boundary.
+APPEAL_MATERIAL_ISSUES = (
+    "result",
+    "affected_case_id",
+    "remedy_outcome",
+    "remedy",
+    "obligation_findings",
+)
 
 ALLOWED_CHALLENGE_CATEGORIES = {
     "authenticity", "relevance", "incomplete", "misleading", "contradicted",
@@ -609,6 +622,46 @@ class CaseWeaveCourt(gl.Contract):
             raise gl.vm.UserError(f"invalid {field}: bounded JSON object required")
         return parsed
 
+    def _canonical_obligation_ids(
+        self, obligations: list, milestones: list
+    ) -> list[str]:
+        """Return the deterministic obligation namespace committed by an agreement.
+
+        Appellate validators may explain a finding in different words, but they
+        must address the same bounded obligations.  The agreement's explicit
+        ``id`` is authoritative; milestone obligation IDs are a compatibility
+        fallback for older structured agreements that omitted an obligations
+        array.  Duplicate or missing identifiers are rejected before the
+        commitment can be accepted, so a validator cannot create a new issue
+        merely by inventing a label in its response.
+        """
+        identifiers = []
+        for item in obligations:
+            if not isinstance(item, dict):
+                raise gl.vm.UserError("each obligation must be a JSON object")
+            raw_id = item.get("id", item.get("obligation_id", ""))
+            obligation_id = self._bounded_text(
+                str(raw_id), "obligation.id", 1
+            )
+            if obligation_id in identifiers:
+                raise gl.vm.UserError("obligation IDs must be unique")
+            identifiers.append(obligation_id)
+
+        if not identifiers:
+            for item in milestones:
+                if not isinstance(item, dict):
+                    raise gl.vm.UserError("each milestone must be a JSON object")
+                obligation_id = self._bounded_text(
+                    str(item.get("obligation_id", "")),
+                    "milestone.obligation_id",
+                    1,
+                )
+                if obligation_id in identifiers:
+                    raise gl.vm.UserError("obligation IDs must be unique")
+                identifiers.append(obligation_id)
+
+        return sorted(identifiers)
+
     def _commitment_hash(self, payload: dict) -> str:
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -695,6 +748,7 @@ class CaseWeaveCourt(gl.Contract):
         obligations = self._bounded_array(obligations_json, "obligations", MAX_OBLIGATIONS)
         deliverables = self._bounded_array(deliverables_json, "deliverables", MAX_DELIVERABLES)
         milestones = self._bounded_array(milestones_json, "milestones", MAX_MILESTONES)
+        self._canonical_obligation_ids(obligations, milestones)
         if repository_url and self._source_adapter(repository_url) not in ("github_release", "github_api"):
             raise gl.vm.UserError("repository_url must use an allowlisted GitHub adapter")
 
@@ -3046,6 +3100,12 @@ The requested outcome is an input label, not a verdict category.
         original_verdict = dispute.verdict_json
         original_judgment = self.judgments[original_judgment_id]
         original_remedy = json.loads(original_judgment.remedy_json or "{}")
+        agreement_spec = self.agreement_specs[dispute.agreement_id]
+        committed_obligations = json.loads(agreement_spec.obligations_json or "[]")
+        committed_milestones = json.loads(agreement_spec.milestones_json or "[]")
+        canonical_obligation_ids = self._canonical_obligation_ids(
+            committed_obligations, committed_milestones
+        )
         appeal_id_local = appeal_id
         dispute_id_local = dispute.dispute_id
         case_id_local = case.case_id
@@ -3072,6 +3132,10 @@ ground={grounds}
 requested_change={requested_change}
 original_verdict={original_verdict}
 original_remedy={json.dumps(original_remedy, sort_keys=True)}
+acceptance_criteria={agreement_spec.acceptance_criteria}
+committed_obligations={json.dumps(committed_obligations, sort_keys=True)}
+canonical_appeal_issues={json.dumps(list(APPEAL_MATERIAL_ISSUES))}
+canonical_obligation_ids={json.dumps(canonical_obligation_ids)}
 immutable_evidence_snapshot={json.dumps(snapshot_items)}
 authenticated_delivery_proofs_in_snapshot={json.dumps(snapshot_delivery_proofs)}
 authorized_new_evidence={json.dumps(new_evidence_local)}
@@ -3081,10 +3145,13 @@ Return only JSON:
 "snapshot_id":"{snapshot_id_local}","result":"affirmed|modified|reversed|weakened_precedent|overturned_precedent|remanded_for_more_evidence",
 "affected_case_id":"{case_id_local} or empty","remedy_outcome":"permitted verdict category or empty",
 "remedy":{{"action":"release|partial_release|refund|none","recipient_role":"claimant|respondent|creator|none","amount_bps":0-10000}},
-"reasoning":"under 700 characters","findings":[{{"obligation":"string","finding":"satisfied|unsatisfied|inconclusive","source":"string"}}]}}
+"reasoning":"under 700 characters","findings":[{{"obligation_id":"one exact committed canonical obligation id","finding":"satisfied|unsatisfied|inconclusive","source":"string"}}]}}
             An overturn or weakening must identify the exact case_id. An affirmed result
             must preserve the original remedy exactly. A remand must not
-pretend that a final remedy was reached.
+            pretend that a final remedy was reached. Return exactly one finding for
+            every canonical obligation ID, with no duplicates or extra IDs. The
+            obligation_id is an identifier, not a natural-language paraphrase.
+            Return all material issue fields even when the result is affirmed.
 """
             answer = gl.nondet.exec_prompt(prompt).replace("```json", "").replace("```", "").strip()
             return json.dumps(json.loads(answer), sort_keys=True)
@@ -3129,32 +3196,83 @@ pretend that a final remedy was reached.
                 )
                 if candidate_outcome != independent_outcome:
                     return False
-                def finding_signature(value):
+                def material_signature(value):
+                    """Normalize only the bounded appellate decision fields.
+
+                    ``reasoning`` and ``source`` are intentionally excluded:
+                    validators must independently assess the record, but they
+                    are not required to use byte-identical prose.  Every
+                    committed obligation is still required exactly once and
+                    its substantive finding remains strict.
+                    """
                     findings = value.get("findings")
-                    if not isinstance(findings, list) or len(findings) > MAX_OBLIGATIONS:
+                    if not isinstance(findings, list) or len(findings) != len(canonical_obligation_ids):
                         return None
-                    signature = {}
+                    finding_map = {}
                     for item in findings:
                         if not isinstance(item, dict):
                             return None
-                        obligation = str(item.get("obligation", ""))
-                        finding = str(item.get("finding", ""))
+                        obligation_id = item.get("obligation_id")
+                        finding = item.get("finding")
                         source = item.get("source", "")
-                        if not obligation or finding not in ALLOWED_FINDINGS or not isinstance(source, str):
+                        if (
+                            not isinstance(obligation_id, str)
+                            or obligation_id not in canonical_obligation_ids
+                            or obligation_id in finding_map
+                            or finding not in ALLOWED_FINDINGS
+                            or not isinstance(source, str)
+                            or len(source) > MAX_APPEAL_SOURCE_LENGTH
+                        ):
                             return None
-                        if obligation in signature:
+                        finding_map[obligation_id] = finding
+                    if set(finding_map) != set(canonical_obligation_ids):
+                        return None
+
+                    result_name = value.get("result")
+                    if result_name not in ALLOWED_APPEAL_RESULTS:
+                        return None
+                    affected_case_id = value.get("affected_case_id")
+                    if result_name in ("weakened_precedent", "overturned_precedent"):
+                        if affected_case_id != case_id_local:
                             return None
-                        signature[obligation] = finding
-                    return signature
-                candidate_findings = finding_signature(candidate)
-                independent_findings = finding_signature(independent)
-                if candidate_findings is None or independent_findings is None:
+                        canonical_affected_case_id = case_id_local
+                    elif affected_case_id not in ("", case_id_local):
+                        return None
+                    else:
+                        # Non-treatment outcomes cannot mutate a precedent.  An
+                        # empty value and the current case ID are therefore the
+                        # same material decision, while treatment outcomes must
+                        # name the exact affected precedent above.
+                        canonical_affected_case_id = ""
+                    outcome = str(
+                        value.get("remedy_outcome", "") or original_judgment.outcome
+                    )
+                    if outcome not in ALLOWED_VERDICTS:
+                        return None
+                    remedy = value.get("remedy")
+                    if not isinstance(remedy, dict):
+                        return None
+                    try:
+                        canonical = self._canonical_remedy(remedy, outcome)
+                    except Exception:
+                        return None
+                    return (
+                        result_name,
+                        canonical_affected_case_id,
+                        outcome,
+                        self._remedy_signature(canonical),
+                        tuple((key, finding_map[key]) for key in canonical_obligation_ids),
+                    )
+
+                if not isinstance(candidate.get("reasoning", ""), str) or len(candidate.get("reasoning", "")) > MAX_APPEAL_REASONING_LENGTH:
                     return False
-                return (
-                    independent.get("result") == candidate.get("result")
-                    and independent.get("affected_case_id", "") == candidate.get("affected_case_id", "")
-                    and candidate_findings == independent_findings
-                )
+                if not isinstance(independent.get("reasoning", ""), str) or len(independent.get("reasoning", "")) > MAX_APPEAL_REASONING_LENGTH:
+                    return False
+                candidate_signature = material_signature(candidate)
+                independent_signature = material_signature(independent)
+                if candidate_signature is None or independent_signature is None:
+                    return False
+                return candidate_signature == independent_signature
             except Exception:
                 return False
 

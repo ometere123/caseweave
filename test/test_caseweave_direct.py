@@ -82,7 +82,7 @@ APPEAL_RESULT = "```json\n" + json.dumps(
         "reasoning": "The appellate validators found the original precedent treatment unsupported by the frozen evidence.",
         "findings": [
             {
-                "obligation": "delivery",
+                "obligation_id": "obligation-1",
                 "finding": "unsatisfied",
                 "source": EVIDENCE_URL,
             }
