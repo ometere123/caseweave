@@ -217,17 +217,17 @@ inside the contract before being written to state.
 | Chain ID   | 61999                                                               |
 | RPC        | https://studio.genlayer.com/api                                    |
 | Explorer   | https://explorer-studio.genlayer.com                            |
-| Contract   | `0x357688E5fc8D433eb2De071fE9ceeDf93eBB024f`                    |
-| Settlement receiver | `0xeF7c04C58716e00F090b2C9ec305BDae86E0D4F7`              |
-| Judgment consumer | `0x9E4Ecf45C0B356bDc46731A4B862ab3E7Ffa2488`              |
+| Contract   | `0x1FB9cA025916AA57A0bC221346cBD913282a5417`                    |
+| Settlement receiver | `0xfA5E9553cf1a25dD7541C4Bd59A89cfe30f2860D`              |
+| Judgment consumer | `0xB5a8F24A6B6CaEF7e71A7A1C365eD991b39B298C`              |
 | Source     | [contracts/caseweave.py](contracts/caseweave.py)                    |
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the verified deployment, owner role,
-transaction evidence, escrow design, redeploy instructions, and the latest
-StudioNet first-instance/appellate-consensus record. The production frontend
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the source-matched deployment, owner
+role, transaction evidence, escrow design, redeploy instructions, and the
+successful StudioNet appellate-to-settlement record. The production frontend
 is [caseweave.vercel.app](https://caseweave.vercel.app). Live settlement and
-consumer evidence is only claimed when appellate consensus reaches a successful
-GenVM result.
+consumer evidence is linked only where the receipt has a successful GenVM
+execution result.
 
 For the iteration record, see [PROJECT_HISTORY.md](PROJECT_HISTORY.md).
 

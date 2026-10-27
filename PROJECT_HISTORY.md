@@ -84,3 +84,21 @@ appellate requests failed closed with `MAJORITY_DISAGREE`, so no `JDG_2`,
 settlement, or consumer write is claimed from that run. The final court source
 SHA-256 is
 `3FDDDA6866DA094D6F6055F3520DCC08523E9840B183BB63560B7908AD6D4EA0`.
+
+## Final appellate closeout — 2026-10-27
+
+The earlier five-transaction appellate blocker was resolved by the bounded
+material-equivalence fix in commit `8e4bbcf`: canonical obligation identifiers
+and material remedy/outcome signatures are strict, while bounded explanatory
+prose is not compared byte-for-byte. The corrected contract source was
+deployed from `645208b7eaa2a1efdc2c296f784b26f89d7a635e` at court
+`0x1FB9cA025916AA57A0bC221346cBD913282a5417`, receiver
+`0xfA5E9553cf1a25dD7541C4Bd59A89cfe30f2860D`, and consumer
+`0xB5a8F24A6B6CaEF7e71A7A1C365eD991b39B298C`.
+
+The fresh run created `AGR_1`, `DIS_1`, `CASE_1`, `JDG_1`, `APP_1`, and
+replacement `JDG_2`; it reached successful appellate consensus, trusted
+900-GEN custody, beneficiary withdrawal submission, and current-judgment
+consumer storage. The complete source-matched record and transaction links
+are in [DEPLOYMENT.md](DEPLOYMENT.md) and
+`test-evidence/studionet-final-appellate-remediation-20261027.json`.
