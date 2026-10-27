@@ -3,15 +3,15 @@ import { assertDistinctCounterparty, toCalldataAddress } from "./address";
 
 export const CASEWEAVE_CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_CONTRACT_ADDRESS ??
-    "0x357688E5fc8D433eb2De071fE9ceeDf93eBB024f") as `0x${string}`;
+    "0x1FB9cA025916AA57A0bC221346cBD913282a5417") as `0x${string}`;
 
 export const CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_JUDGMENT_CONSUMER_ADDRESS ??
-    "0x9E4Ecf45C0B356bDc46731A4B862ab3E7Ffa2488") as `0x${string}` | "";
+    "0xB5a8F24A6B6CaEF7e71A7A1C365eD991b39B298C") as `0x${string}` | "";
 
 export const CASEWEAVE_SETTLEMENT_RECEIVER_ADDRESS =
   (process.env.NEXT_PUBLIC_CASEWEAVE_SETTLEMENT_RECEIVER_ADDRESS ??
-    "0xeF7c04C58716e00F090b2C9ec305BDae86E0D4F7") as `0x${string}` | "";
+    "0xfA5E9553cf1a25dD7541C4Bd59A89cfe30f2860D") as `0x${string}` | "";
 
 export const EVIDENCE_STATUSES = [
   "unverified",
